@@ -1,0 +1,147 @@
+{
+  "evidence": "structural",
+  "transaction_dialect": "send_receive",
+  "encoding": "hex",
+  "exchanges": [
+    {
+      "name": "status-running",
+      "request": "c200000400",
+      "response": "e0e0e0e0"
+    },
+    {
+      "name": "trigger-position",
+      "request": "c20a000400",
+      "response": "0000e0e0"
+    },
+    {
+      "name": "freq-a-select",
+      "request": "c10000000000",
+      "response": ""
+    },
+    {
+      "name": "freq-a-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-a-count",
+      "request": "c201000400",
+      "response": "000186a0"
+    },
+    {
+      "name": "freq-b-select",
+      "request": "c10000000001",
+      "response": ""
+    },
+    {
+      "name": "freq-b-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-b-count",
+      "request": "c201000400",
+      "response": "000030d4"
+    },
+    {
+      "name": "freq-c-select",
+      "request": "c10000000002",
+      "response": ""
+    },
+    {
+      "name": "freq-c-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-c-count",
+      "request": "c201000400",
+      "response": "00000000"
+    },
+    {
+      "name": "freq-d-select",
+      "request": "c10000000003",
+      "response": ""
+    },
+    {
+      "name": "freq-d-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-d-count",
+      "request": "c201000400",
+      "response": "000f4240"
+    },
+    {
+      "name": "status-running",
+      "request": "c200000400",
+      "response": "e0e0e0e0"
+    },
+    {
+      "name": "trigger-position",
+      "request": "c20a000400",
+      "response": "0000e0e0"
+    },
+    {
+      "name": "freq-a-select",
+      "request": "c10000000000",
+      "response": ""
+    },
+    {
+      "name": "freq-a-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-a-count",
+      "request": "c201000400",
+      "response": "000186a0"
+    },
+    {
+      "name": "freq-b-select",
+      "request": "c10000000001",
+      "response": ""
+    },
+    {
+      "name": "freq-b-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-b-count",
+      "request": "c201000400",
+      "response": "000030d4"
+    },
+    {
+      "name": "freq-c-select",
+      "request": "c10000000002",
+      "response": ""
+    },
+    {
+      "name": "freq-c-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-c-count",
+      "request": "c201000400",
+      "response": "00000000"
+    },
+    {
+      "name": "freq-d-select",
+      "request": "c10000000003",
+      "response": ""
+    },
+    {
+      "name": "freq-d-gate",
+      "request": "c200000100",
+      "response": "00"
+    },
+    {
+      "name": "freq-d-count",
+      "request": "c201000400",
+      "response": "000f4240"
+    }
+  ]
+}

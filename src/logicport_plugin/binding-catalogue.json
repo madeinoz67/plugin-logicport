@@ -1,0 +1,353 @@
+{
+  "contract_version": "0.3.0",
+  "descriptor_sha256": "5ed1d4970750c0c1a861ddf46671ceb94427f5088e8355aed7bbf963b26a4984",
+  "targets": [
+    {
+      "id": "status",
+      "kind": "observation",
+      "parameter_id": "status",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "scalar",
+          "axis_role": "receipt_time"
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "unit": "count",
+          "shape": "scalar",
+          "axis_role": "value"
+        }
+      ]
+    },
+    {
+      "id": "trigger_position",
+      "kind": "observation",
+      "parameter_id": "trigger_position",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "scalar",
+          "axis_role": "receipt_time"
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "unit": "count",
+          "shape": "scalar",
+          "axis_role": "value"
+        }
+      ]
+    },
+    {
+      "id": "frequency_a",
+      "kind": "observation",
+      "parameter_id": "frequency_a",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "scalar",
+          "axis_role": "receipt_time"
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "unit": "Hz",
+          "shape": "scalar",
+          "axis_role": "value"
+        }
+      ]
+    },
+    {
+      "id": "frequency_b",
+      "kind": "observation",
+      "parameter_id": "frequency_b",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "scalar",
+          "axis_role": "receipt_time"
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "unit": "Hz",
+          "shape": "scalar",
+          "axis_role": "value"
+        }
+      ]
+    },
+    {
+      "id": "frequency_c",
+      "kind": "observation",
+      "parameter_id": "frequency_c",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "scalar",
+          "axis_role": "receipt_time"
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "unit": "Hz",
+          "shape": "scalar",
+          "axis_role": "value"
+        }
+      ]
+    },
+    {
+      "id": "frequency_d",
+      "kind": "observation",
+      "parameter_id": "frequency_d",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "scalar",
+          "axis_role": "receipt_time"
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "unit": "Hz",
+          "shape": "scalar",
+          "axis_role": "value"
+        }
+      ]
+    },
+    {
+      "id": "capture",
+      "kind": "dataset",
+      "action_id": "otdp.logic_analyser.fetch/1.0.0",
+      "profile_ids": [
+        "otdp.logic_analyser/1.0.0"
+      ],
+      "measurement_schema_id": "urn:otdp:measurement:0.2.2",
+      "variables": [
+        {
+          "id": "time",
+          "type": "number",
+          "unit": "s",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d0",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d1",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d2",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d3",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d4",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d5",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d6",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d7",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d8",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d9",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d10",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d11",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d12",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d13",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d14",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d15",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d16",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d17",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d18",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d19",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d20",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d21",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d22",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d23",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d24",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d25",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d26",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d27",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d28",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d29",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d30",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_d31",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_clk1",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        },
+        {
+          "id": "ch_clk2",
+          "type": "string",
+          "unit": "state",
+          "shape": "vector"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+{
+  "contract_version": "0.3.0",
+  "plugin_id": "intronix.logicport",
+  "descriptor_sha256": "5ed1d4970750c0c1a861ddf46671ceb94427f5088e8355aed7bbf963b26a4984",
+  "bindings": [
+    {
+      "id": "status",
+      "kind": "observation",
+      "target_id": "status"
+    },
+    {
+      "id": "trigger_position",
+      "kind": "observation",
+      "target_id": "trigger_position"
+    },
+    {
+      "id": "frequency_a",
+      "kind": "observation",
+      "target_id": "frequency_a"
+    },
+    {
+      "id": "frequency_b",
+      "kind": "observation",
+      "target_id": "frequency_b"
+    },
+    {
+      "id": "frequency_c",
+      "kind": "observation",
+      "target_id": "frequency_c"
+    },
+    {
+      "id": "frequency_d",
+      "kind": "observation",
+      "target_id": "frequency_d"
+    },
+    {
+      "id": "capture",
+      "kind": "dataset",
+      "target_id": "capture"
+    }
+  ],
+  "pages": [
+    {
+      "id": "readings",
+      "title": "Readings",
+      "kind": "readings",
+      "bindings": [
+        "status",
+        "trigger_position",
+        "frequency_a",
+        "frequency_b",
+        "frequency_c",
+        "frequency_d"
+      ],
+      "required": true,
+      "plots": [
+        {
+          "kind": "time_series",
+          "binding_id": "status",
+          "x": "time",
+          "y": [
+            "value"
+          ],
+          "channel_hints": [
+            {
+              "variable_id": "value",
+              "color_role": "muted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "capture",
+      "title": "Capture",
+      "kind": "dataset",
+      "bindings": [
+        "capture"
+      ],
+      "required": true,
+      "plots": [
+        {
+          "kind": "digital_lanes",
+          "binding_id": "capture",
+          "x": "time",
+          "y": [
+            "ch_d0",
+            "ch_d1",
+            "ch_d2",
+            "ch_d3",
+            "ch_d4",
+            "ch_d5",
+            "ch_d6",
+            "ch_d7",
+            "ch_d8",
+            "ch_d9",
+            "ch_d10",
+            "ch_d11",
+            "ch_d12",
+            "ch_d13",
+            "ch_d14",
+            "ch_d15",
+            "ch_d16",
+            "ch_d17",
+            "ch_d18",
+            "ch_d19",
+            "ch_d20",
+            "ch_d21",
+            "ch_d22",
+            "ch_d23",
+            "ch_d24",
+            "ch_d25",
+            "ch_d26",
+            "ch_d27",
+            "ch_d28",
+            "ch_d29",
+            "ch_d30",
+            "ch_d31",
+            "ch_clk1",
+            "ch_clk2"
+          ],
+          "channel_hints": [
+            {
+              "variable_id": "ch_d0",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d1",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d2",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d3",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d4",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d5",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d6",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d7",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_d8",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d9",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d10",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d11",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d12",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d13",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d14",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d15",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d16",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d17",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d18",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d19",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d20",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d21",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d22",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d23",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d24",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d25",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d26",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d27",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d28",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d29",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d30",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_d31",
+              "visible": false
+            },
+            {
+              "variable_id": "ch_clk1",
+              "visible": true
+            },
+            {
+              "variable_id": "ch_clk2",
+              "visible": true
+            }
+          ],
+          "lane_groups": [
+            {
+              "id": "bus-a",
+              "label": "D0-7 (bus A)",
+              "member_ids": [
+                "ch_d0",
+                "ch_d1",
+                "ch_d2",
+                "ch_d3",
+                "ch_d4",
+                "ch_d5",
+                "ch_d6",
+                "ch_d7"
+              ],
+              "radix": "hex",
+              "default_collapsed": false
+            },
+            {
+              "id": "bus-b",
+              "label": "D8-15 (bus B)",
+              "member_ids": [
+                "ch_d8",
+                "ch_d9",
+                "ch_d10",
+                "ch_d11",
+                "ch_d12",
+                "ch_d13",
+                "ch_d14",
+                "ch_d15"
+              ],
+              "radix": "hex",
+              "default_collapsed": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

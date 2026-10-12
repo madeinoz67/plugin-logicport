@@ -1,0 +1,74 @@
+{
+  "profile_id": "intronix.logicport/1.0.0",
+  "title": "Intronix LogicPort adapter actions",
+  "description": "Plugin-authored action profile for the LogicPort adapter. The actions are adapter-bound operations over the reverse-engineered protocol; they are not an OTDP device-class contract. Operations whose protocol destinations are open items refuse loudly with UNSUPPORTED rather than guessing a register.",
+  "otdp_version": "0.2.2",
+  "actions": {
+    "configure_fpga": {
+      "description": "Load the FPGA bitstream from a LogicPort.ccf file through the FTDI bit-bang sequence (LogicPort-Protocol.md section 5; hardware-proven slot 0). The .ccf path comes from the action input or the LOGICPORT_CCF environment variable; the SHA-256 must be the hardware-proven digest.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ccf_path": { "type": "string" },
+          "slot": { "type": "integer", "minimum": 0, "maximum": 7 },
+          "attempts": { "type": "integer", "minimum": 1, "maximum": 20 },
+          "init_timeout_ms": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      },
+      "output_summary": "slot, offset, length, bitstream_bytes, digest_verified, checksum_ok, pages_swapped, init_asserted, done, rate_command_resent, attempts",
+      "side_effect": "state_change"
+    },
+    "set_trigger": {
+      "description": "Send the two 34-bit trigger masks as usbWrite40 C1 frames (LogicPort-Protocol.md section 5a). REFUSES with UNSUPPORTED while the mask destination registers are open items.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "mask_a": { "type": "integer", "minimum": 0, "maximum": 17179869183 },
+          "mask_b": { "type": "integer", "minimum": 0, "maximum": 17179869183 }
+        },
+        "required": ["mask_a", "mask_b"],
+        "additionalProperties": false
+      },
+      "output_summary": "mask_a, mask_b, frames_sent",
+      "side_effect": "state_change"
+    },
+    "stop": {
+      "description": "Send the C3 stop frame with the cached rate word (LogicPort-Protocol.md section 3.3).",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_summary": "acknowledged, rate_word",
+      "side_effect": "state_change"
+    },
+    "resync": {
+      "description": "The section 3.4 resync flush: re-init, purges, 65535 and 30000 zero bytes, the 0x01 marker, purges. Up to 20 attempts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "attempts": { "type": "integer", "minimum": 1, "maximum": 20 }
+        },
+        "additionalProperties": false
+      },
+      "output_summary": "attempts, marker_sent",
+      "side_effect": "state_change"
+    },
+    "read_samples": {
+      "description": "Read the trigger-position word, then ten sample-plane chunks (five planes, two ping-pong pages), de-interleave and RLE-decode per LogicPort-Protocol.md section 6. Returns packed 34-bit column states, run counts and the total sample count.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "column_count": { "type": "integer", "minimum": 1, "maximum": 2047 },
+          "prescale": { "type": "integer", "minimum": 0 },
+          "trigger_word": { "type": "integer", "minimum": 0, "maximum": 2047 }
+        },
+        "required": ["column_count"],
+        "additionalProperties": false
+      },
+      "output_summary": "column_count, page_base, trigger_position, columns, runs, total_samples, trigger_column (when trigger_word given)",
+      "side_effect": "none"
+    }
+  }
+}

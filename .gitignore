@@ -1,0 +1,24 @@
+# ignore
+.venv/
+venv/
+__pycache__/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# unlicensed vendor content — never commit (see README "Obtaining vendor files")
+*.ccf
+*.exe
+*.dll
+*.sys
+*.chm
+*.inf
+*.cat
+bin/
+extracted/
+
+# generated design artifacts (superpowers brainstorm/spec/plan) — never commit
+# per owner directive 2026-10-12
+docs/superpowers/
+docs/plans/
+*.design.md
