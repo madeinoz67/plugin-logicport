@@ -1,0 +1,72 @@
+{
+  "contract_version": "0.3.1",
+  "id": "preset-fast-capture",
+  "title": "Fast capture (bus A and clocks)",
+  "revision": "1.0.0",
+  "plugin_id": "intronix.logicport",
+  "profile_ids": [
+    "otdp.logic_analyser/1.0.0"
+  ],
+  "supported_firmware": [
+    "0x0400"
+  ],
+  "settings_schema": {
+    "id": "urn:otdp:action:logic_analyser.configure:1.0.0:input",
+    "sha256": "1c5d665667e7dc0b497e3814fc81912f07b5ad8dd05770b2d00eccd9c4afbc7f"
+  },
+  "settings": {
+    "configuration_id": "preset-fast-capture",
+    "channels": [
+      {
+        "channel": "d0",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d1",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d2",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d3",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d4",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d5",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d6",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "d7",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "clk1",
+        "threshold_v": 1.65
+      },
+      {
+        "channel": "clk2",
+        "threshold_v": 1.65
+      }
+    ],
+    "sample_rate_hz": 100000000,
+    "sample_count": 2048,
+    "trigger": {
+      "kind": "immediate"
+    }
+  },
+  "provenance": {
+    "author": "LogicPort plugin maintainers",
+    "revision": "1.0.0",
+    "evidence": "documented"
+  }
+}

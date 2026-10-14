@@ -22,3 +22,6 @@ extracted/
 docs/superpowers/
 docs/plans/
 *.design.md
+
+# standalone capture library runtime state — never commit
+captures/
