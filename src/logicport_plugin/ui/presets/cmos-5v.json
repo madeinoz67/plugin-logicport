@@ -1,5 +1,5 @@
 {
-  "contract_version": "0.3.1",
+  "contract_version": "0.4.0",
   "id": "preset-cmos-5v",
   "title": "5 V CMOS capture (all channels)",
   "revision": "1.0.0",
