@@ -21,10 +21,38 @@ With --with-ui, the SDK also generates UI-GUIDE.md at the project root and
 presentation.json, binding-catalogue.json and ui/manifest.json inside src/<package>/.
 Add optional settings schemas under src/<package>/ui/settings/, complete presets
 under src/<package>/ui/presets/, and declared assets under src/<package>/ui/assets/.
+A stylesheet at `src/<package>/ui/preview.css`, declared in the manifest
+with `path` exactly `preview.css`, restyles the preview pages; see
+UI-GUIDE.md and the user guide section
+"The plugin stylesheet override (preview.css)".
 Those optional directories and configuration files are author-supplied. See
 UI-GUIDE.md when present. For configuration without UI, use src/<package>/config/
 with settings.schema.json and presets/. When UI presents those settings, keep one
 authoritative copy under ui/settings/ and ui/presets/ rather than duplicating it.
+
+### What derive-ui cannot decide
+
+A class-conformant descriptor derives its presentation set from the class
+reference for its profile. The derivation cannot decide everything. The SDK
+shows the `cannot_derive` items when it derives the set. This guide names the
+same items:
+
+- `thresholds`: the safe `threshold_v` range for the logic family. Put the
+  limits in the settings schema with the `input_constraints` key on the
+  descriptor.
+- `arm-safety`: the safe sequence of the trigger and arm actions. The safe
+  sequence is specific to the device and the device under test. The reference
+  binds the buttons. It does not give the sequence.
+- `lane-names`: lane names beyond the descriptor labels. The descriptor owns
+  channel identity. Label the channels in the descriptor.
+- `presets`: preset settings values. Presets are commissioned evidence, never
+  derived. Write `ui/presets/*.json`. Check each file with `check-preset`.
+  The expander gives the scaffold only.
+- `decode-settings`: decode options beyond the closed unions. Declare
+  `decoders[]` on the descriptor.
+
+A successful derivation is not admission, approval to apply settings, or
+permission to operate hardware.
 
 Optional project-root docs/compatibility.md and docs/qualification.md describe
 supported models/firmware and supervised hardware evidence. firmware/README.md
