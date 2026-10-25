@@ -1069,7 +1069,7 @@ class Plugin:
 
         # Expand to sample space, bounded by max_bytes (about two bytes per
         # lane value plus the time axis).
-        lane_ids = [f"ch_{channel['id']}" for channel in self.descriptor.get("channels", [])]
+        lane_ids = [f"ch_{channel['id']}" for channel in self.descriptor.get("channels", []) if channel.get("role") == "digital_input"]
         if not lane_ids:
             lane_ids = [f"ch_d{i}" for i in range(32)] + ["ch_clk1", "ch_clk2"]
         per_sample_budget = max(1, max_bytes // (len(lane_ids) + 1))
