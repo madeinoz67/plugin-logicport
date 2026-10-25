@@ -535,6 +535,39 @@
                 "logic_state"
             ],
             "parameter_names": []
+        },
+        {
+            "id": "frequency_a",
+            "label": "Frequency A",
+            "role": "measure",
+            "quantities": [
+                "frequency"
+            ],
+            "parameter_names": [
+                "frequency_a"
+            ]
+        },
+        {
+            "id": "frequency_b",
+            "label": "Frequency B",
+            "role": "measure",
+            "quantities": [
+                "frequency"
+            ],
+            "parameter_names": [
+                "frequency_b"
+            ]
+        },
+        {
+            "id": "frequency_c",
+            "label": "Frequency C",
+            "role": "measure",
+            "quantities": [
+                "frequency"
+            ],
+            "parameter_names": [
+                "frequency_c"
+            ]
         }
     ],
     "capture_formats": [
@@ -573,6 +606,7 @@
     },
     "profiles": [
         "intronix.logicport/1.0.0",
+        "otdp.dmm/1.0.0",
         "otdp.logic_analyser/1.0.0"
     ],
     "contracts": [
@@ -1026,6 +1060,36 @@
             "binding": {
                 "kind": "adapter",
                 "key": "configure_sequencer"
+            }
+        },
+        "otdp.dmm.measure/1.0.0": {
+            "timeout_ms": 5000,
+            "side_effect": "none",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "otdp.dmm.measure/1.0.0"
+            }
+        },
+        "otdp.dmm.configure/1.0.0": {
+            "timeout_ms": 5000,
+            "side_effect": "none",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "otdp.dmm.configure/1.0.0"
             }
         }
     }

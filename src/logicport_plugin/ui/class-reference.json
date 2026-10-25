@@ -8,6 +8,10 @@
     {
       "expectation_id": "otdp.logic_analyser.configure/1.0.0",
       "reason": "preset surface derived with no commissioned presets at birth; author ui/presets/ and validate via check-preset"
+    },
+    {
+      "expectation_id": "otdp.dmm.measure/1.0.0",
+      "reason": "L0 at birth: no staged control derives; the deviation is REPORTED, never silent"
     }
   ],
   "custom_actions": [
