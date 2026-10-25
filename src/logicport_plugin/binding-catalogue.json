@@ -1,133 +1,7 @@
 {
   "contract_version": "0.4.0",
-  "descriptor_sha256": "5ed1d4970750c0c1a861ddf46671ceb94427f5088e8355aed7bbf963b26a4984",
+  "descriptor_sha256": "bb3207f3494e0e0ee481a92bb803435eae7fe265ff17cec8fab608814a675ad6",
   "targets": [
-    {
-      "id": "status",
-      "kind": "observation",
-      "parameter_id": "status",
-      "variables": [
-        {
-          "id": "time",
-          "type": "number",
-          "unit": "s",
-          "shape": "scalar",
-          "axis_role": "receipt_time"
-        },
-        {
-          "id": "value",
-          "type": "integer",
-          "unit": "count",
-          "shape": "scalar",
-          "axis_role": "value"
-        }
-      ]
-    },
-    {
-      "id": "trigger_position",
-      "kind": "observation",
-      "parameter_id": "trigger_position",
-      "variables": [
-        {
-          "id": "time",
-          "type": "number",
-          "unit": "s",
-          "shape": "scalar",
-          "axis_role": "receipt_time"
-        },
-        {
-          "id": "value",
-          "type": "integer",
-          "unit": "count",
-          "shape": "scalar",
-          "axis_role": "value"
-        }
-      ]
-    },
-    {
-      "id": "frequency_a",
-      "kind": "observation",
-      "parameter_id": "frequency_a",
-      "variables": [
-        {
-          "id": "time",
-          "type": "number",
-          "unit": "s",
-          "shape": "scalar",
-          "axis_role": "receipt_time"
-        },
-        {
-          "id": "value",
-          "type": "integer",
-          "unit": "Hz",
-          "shape": "scalar",
-          "axis_role": "value"
-        }
-      ]
-    },
-    {
-      "id": "frequency_b",
-      "kind": "observation",
-      "parameter_id": "frequency_b",
-      "variables": [
-        {
-          "id": "time",
-          "type": "number",
-          "unit": "s",
-          "shape": "scalar",
-          "axis_role": "receipt_time"
-        },
-        {
-          "id": "value",
-          "type": "integer",
-          "unit": "Hz",
-          "shape": "scalar",
-          "axis_role": "value"
-        }
-      ]
-    },
-    {
-      "id": "frequency_c",
-      "kind": "observation",
-      "parameter_id": "frequency_c",
-      "variables": [
-        {
-          "id": "time",
-          "type": "number",
-          "unit": "s",
-          "shape": "scalar",
-          "axis_role": "receipt_time"
-        },
-        {
-          "id": "value",
-          "type": "integer",
-          "unit": "Hz",
-          "shape": "scalar",
-          "axis_role": "value"
-        }
-      ]
-    },
-    {
-      "id": "frequency_d",
-      "kind": "observation",
-      "parameter_id": "frequency_d",
-      "variables": [
-        {
-          "id": "time",
-          "type": "number",
-          "unit": "s",
-          "shape": "scalar",
-          "axis_role": "receipt_time"
-        },
-        {
-          "id": "value",
-          "type": "integer",
-          "unit": "Hz",
-          "shape": "scalar",
-          "axis_role": "value"
-        }
-      ]
-    },
     {
       "id": "capture",
       "kind": "dataset",
@@ -138,216 +12,246 @@
       "measurement_schema_id": "urn:otdp:measurement:0.2.2",
       "variables": [
         {
-          "id": "time",
+          "id": "t",
           "type": "number",
           "unit": "s",
+          "shape": "vector",
+          "axis_role": "x"
+        },
+        {
+          "id": "d0",
+          "type": "string",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d0",
+          "id": "d1",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d1",
+          "id": "d2",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d2",
+          "id": "d3",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d3",
+          "id": "d4",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d4",
+          "id": "d5",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d5",
+          "id": "d6",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d6",
+          "id": "d7",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d7",
+          "id": "d8",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d8",
+          "id": "d9",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d9",
+          "id": "d10",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d10",
+          "id": "d11",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d11",
+          "id": "d12",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d12",
+          "id": "d13",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d13",
+          "id": "d14",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d14",
+          "id": "d15",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d15",
+          "id": "d16",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d16",
+          "id": "d17",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d17",
+          "id": "d18",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d18",
+          "id": "d19",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d19",
+          "id": "d20",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d20",
+          "id": "d21",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d21",
+          "id": "d22",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d22",
+          "id": "d23",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d23",
+          "id": "d24",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d24",
+          "id": "d25",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d25",
+          "id": "d26",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d26",
+          "id": "d27",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d27",
+          "id": "d28",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d28",
+          "id": "d29",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d29",
+          "id": "d30",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d30",
+          "id": "d31",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_d31",
+          "id": "clk1",
           "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         },
         {
-          "id": "ch_clk1",
+          "id": "clk2",
           "type": "string",
-          "unit": "state",
-          "shape": "vector"
-        },
-        {
-          "id": "ch_clk2",
-          "type": "string",
-          "unit": "state",
+          "unit": null,
           "shape": "vector"
         }
       ]
+    },
+    {
+      "id": "configure",
+      "kind": "configuration",
+      "action_id": "otdp.logic_analyser.configure/1.0.0",
+      "profile_ids": [
+        "otdp.logic_analyser/1.0.0"
+      ],
+      "input_schema_id": "urn:otdp:action:logic_analyser.configure:1.0.0:input",
+      "schema_asset_id": "settings/configure.schema.json",
+      "preset_asset_ids": []
+    },
+    {
+      "id": "arm",
+      "kind": "procedure",
+      "action_id": "otdp.logic_analyser.arm/1.0.0",
+      "profile_ids": [
+        "otdp.logic_analyser/1.0.0"
+      ],
+      "input_schema_id": "urn:otdp:action:logic_analyser.arm:1.0.0:input"
+    },
+    {
+      "id": "abort",
+      "kind": "procedure",
+      "action_id": "otdp.logic_analyser.abort/1.0.0",
+      "profile_ids": [
+        "otdp.logic_analyser/1.0.0"
+      ],
+      "input_schema_id": "urn:otdp:action:logic_analyser.abort:1.0.0:input"
     }
   ]
 }

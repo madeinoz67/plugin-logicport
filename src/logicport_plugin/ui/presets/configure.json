@@ -1,0 +1,23 @@
+{
+  "contract_version": "0.4.0",
+  "id": "scaffold-configure",
+  "title": "Scaffold preset for configure",
+  "revision": "0",
+  "plugin_id": "intronix.logicport",
+  "profile_ids": [
+    "otdp.logic_analyser/1.0.0"
+  ],
+  "supported_firmware": [
+    "0"
+  ],
+  "settings_schema": {
+    "id": "urn:otdp:action:logic_analyser.configure:1.0.0:input",
+    "sha256": "9be6382423fb0d3d88c86cd01014ce33faa0832f721832c117f564f453771f41"
+  },
+  "settings": {},
+  "provenance": {
+    "author": "benchweave-sdk expander (scaffold; commission values via check-preset)",
+    "revision": "0",
+    "evidence": "synthetic"
+  }
+}

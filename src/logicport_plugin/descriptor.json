@@ -1,1091 +1,1032 @@
 {
-  "otdp_version": "0.2.2",
-  "descriptor_version": "0.1.0",
-  "id": "intronix.logicport",
-  "display_name": "Intronix LogicPort",
-  "description": "Intronix LogicPort 34-channel USB logic analyser (FTDI VID 0x0403 PID 0xDC48). Framing, FPGA load, status and sample-plane decode are implemented from the reverse-engineered protocol; configuration-write destination registers are open items and refuse loudly. Not hardware qualified.",
-  "identity": {
-    "strategy": "adapter",
-    "manufacturer": "Intronix",
-    "model": "LogicPort",
-    "firmware_policy": "commissioned"
-  },
-  "integration": {
-    "mode": "adapter",
-    "adapter": {
-      "entry_point": "logicport_plugin.adapter:create_plugin",
-      "api_version": "1.1",
-      "version": "0.1.0",
-      "dependencies": [],
-      "permissions": [
-        "scoped_transport"
-      ]
-    }
-  },
-  "transport": {
-    "type": "custom",
-    "connection_key": "logicport",
-    "settings": {
-      "protocol_reference": "LogicPort-Protocol.md section 3 wire framing; ftdi_control dialect pending a pinned transport-provider contract"
-    }
-  },
-  "capabilities": [
-    "identify",
-    "read",
-    "write",
-    "invoke",
-    "reset"
-  ],
-  "operations": {
-    "identify": {
-      "timeout_ms": 1000,
-      "side_effect": "none",
-      "retry": "idempotent",
-      "cancellable": true,
-      "completion": "acknowledged"
+    "otdp_version": "0.2.2",
+    "descriptor_version": "0.1.0",
+    "id": "intronix.logicport",
+    "display_name": "Intronix LogicPort",
+    "description": "Intronix LogicPort 34-channel USB logic analyser (FTDI VID 0x0403 PID 0xDC48). Framing, FPGA load, status and sample-plane decode are implemented from the reverse-engineered protocol; configuration-write destination registers are open items and refuse loudly. Not hardware qualified.",
+    "identity": {
+        "strategy": "adapter",
+        "manufacturer": "Intronix",
+        "model": "LogicPort",
+        "firmware_policy": "commissioned"
     },
-    "read": {
-      "timeout_ms": 2500,
-      "side_effect": "none",
-      "retry": "never",
-      "cancellable": true,
-      "completion": "acknowledged"
-    },
-    "write": {
-      "timeout_ms": 1000,
-      "side_effect": "state_change",
-      "retry": "never",
-      "cancellable": true,
-      "completion": "dispatched"
-    },
-    "invoke": {
-      "timeout_ms": 60000,
-      "side_effect": "state_change",
-      "retry": "never",
-      "cancellable": true,
-      "completion": "acknowledged"
-    },
-    "reset": {
-      "timeout_ms": 5000,
-      "side_effect": "state_change",
-      "retry": "idempotent",
-      "cancellable": true,
-      "completion": "acknowledged"
-    }
-  },
-  "parameters": [
-    {
-      "name": "rate_word",
-      "description": "Packed C1/C2 rate and clock-select word (LogicPort-Protocol.md section 3.1); the Hz-to-rate-value conversion is an open item",
-      "type": "int",
-      "access": "rw",
-      "semantic": "configuration",
-      "unit": "count",
-      "range": [
-        0,
-        4294967295
-      ],
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "rate_word"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      },
-      "write_policy": {
-        "effect": "setting",
-        "completion": "dispatched",
-        "retry": "never"
-      }
-    },
-    {
-      "name": "threshold_v",
-      "description": "Input threshold in volts; converts to the 10-bit DAC code of LogicPort-Protocol.md section 5a (about 14.3 mV per code)",
-      "type": "float",
-      "access": "rw",
-      "semantic": "setpoint",
-      "unit": "V",
-      "range": [
-        -6.0,
-        6.0
-      ],
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "threshold_v"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      },
-      "write_policy": {
-        "effect": "setting",
-        "completion": "dispatched",
-        "retry": "never"
-      }
-    },
-    {
-      "name": "status",
-      "description": "Status byte of register 0x100000 (LogicPort-Protocol.md section 5c): bit 0 capture complete, bit 1 immediate trigger, bits 6:5 pre-trigger fill phase",
-      "type": "int",
-      "access": "ro",
-      "semantic": "state",
-      "unit": "count",
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "status"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      }
-    },
-    {
-      "name": "frequency_a",
-      "description": "Frequency-counter channel 0 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
-      "type": "int",
-      "access": "ro",
-      "semantic": "measurement",
-      "unit": "Hz",
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "frequency_a"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      }
-    },
-    {
-      "name": "frequency_b",
-      "description": "Frequency-counter channel 1 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
-      "type": "int",
-      "access": "ro",
-      "semantic": "measurement",
-      "unit": "Hz",
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "frequency_b"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      }
-    },
-    {
-      "name": "frequency_c",
-      "description": "Frequency-counter channel 2 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
-      "type": "int",
-      "access": "ro",
-      "semantic": "measurement",
-      "unit": "Hz",
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "frequency_c"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      }
-    },
-    {
-      "name": "frequency_d",
-      "description": "Frequency-counter channel 3 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
-      "type": "int",
-      "access": "ro",
-      "semantic": "measurement",
-      "unit": "Hz",
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "frequency_d"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      }
-    },
-    {
-      "name": "trigger_position",
-      "description": "Trigger position word of register 0x10000A (LogicPort-Protocol.md section 5b)",
-      "type": "int",
-      "access": "ro",
-      "semantic": "state",
-      "unit": "count",
-      "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "trigger_position"
-      },
-      "read_policy": {
-        "max_age_ms": 0,
-        "destructive": false
-      }
-    }
-  ],
-  "channels": [
-    {
-      "id": "d0",
-      "label": "D0",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d1",
-      "label": "D1",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d2",
-      "label": "D2",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d3",
-      "label": "D3",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d4",
-      "label": "D4",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d5",
-      "label": "D5",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d6",
-      "label": "D6",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d7",
-      "label": "D7",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d8",
-      "label": "D8",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d9",
-      "label": "D9",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d10",
-      "label": "D10",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d11",
-      "label": "D11",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d12",
-      "label": "D12",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d13",
-      "label": "D13",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d14",
-      "label": "D14",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d15",
-      "label": "D15",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d16",
-      "label": "D16",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d17",
-      "label": "D17",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d18",
-      "label": "D18",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d19",
-      "label": "D19",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d20",
-      "label": "D20",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d21",
-      "label": "D21",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d22",
-      "label": "D22",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d23",
-      "label": "D23",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d24",
-      "label": "D24",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d25",
-      "label": "D25",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d26",
-      "label": "D26",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d27",
-      "label": "D27",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d28",
-      "label": "D28",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d29",
-      "label": "D29",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d30",
-      "label": "D30",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "d31",
-      "label": "D31",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "clk1",
-      "label": "CLK1 (ch32)",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    },
-    {
-      "id": "clk2",
-      "label": "CLK2 (ch33)",
-      "role": "digital_input",
-      "quantities": [
-        "logic_state"
-      ],
-      "parameter_names": []
-    }
-  ],
-  "capture_formats": [
-    "raw_binary"
-  ],
-  "capture_limits": {
-    "max_samples": 2048,
-    "max_bytes": 10240
-  },
-  "required_features": [
-    "otdp.core/0.1.0",
-    "otdp.adapter/0.1.0",
-    "otdp.profile_actions/0.1.0",
-    "otdp.measurement/0.1.0"
-  ],
-  "provenance": {
-    "sources": [
-      {
-        "title": "LogicPort USB protocol reverse-engineering record",
-        "reference": "LogicPort-Protocol.md",
-        "revision": "2026-10-12"
-      },
-      {
-        "title": "FPGA loader hardware result (DONE asserted, slot 0)",
-        "reference": "LogicPort-Protocol.md section 9",
-        "revision": "2026-10-12"
-      }
-    ],
-    "test_vectors": [
-      {
-        "id": "logicport-wire",
-        "path": "vectors.json",
-        "purpose": "Wire-protocol exchange rehearsal: status poll, trigger position, sample-plane reads and stop"
-      }
-    ]
-  },
-  "profiles": [
-    "intronix.logicport/1.0.0",
-    "otdp.logic_analyser/1.0.0"
-  ],
-  "contracts": [
-    {
-      "id": "urn:logicport:profile:1.0.0",
-      "path": "logicport-profile.json",
-      "sha256": "75db8566519216a2591fde2864d204d1b8391c4170684e44791e226e852d456d"
-    },
-    {
-      "id": "urn:otdp:measurement:0.2.2",
-      "path": "otdp-measurement.schema.json",
-      "sha256": "7905795bed6139b9705edfa17b7a17226b99cddda6656030d73bb63dc998a4b3"
-    }
-  ],
-  "actions": {
-    "configure_fpga": {
-      "binding": {
-        "kind": "adapter",
-        "key": "configure_fpga"
-      },
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "ccf_path": {
-            "type": "string"
-          },
-          "slot": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 7
-          },
-          "attempts": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20
-          },
-          "init_timeout_ms": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        "additionalProperties": false
-      },
-      "timeout_ms": 60000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never"
-    },
-    "set_trigger": {
-      "binding": {
-        "kind": "adapter",
-        "key": "set_trigger"
-      },
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "mask_a": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 17179869183
-          },
-          "mask_b": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 17179869183
-          }
-        },
-        "required": [
-          "mask_a",
-          "mask_b"
-        ],
-        "additionalProperties": false
-      },
-      "timeout_ms": 5000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never"
-    },
-    "stop": {
-      "binding": {
-        "kind": "adapter",
-        "key": "stop"
-      },
-      "input_constraints": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "timeout_ms": 1000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "idempotent"
-    },
-    "resync": {
-      "binding": {
-        "kind": "adapter",
-        "key": "resync"
-      },
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "attempts": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20
-          }
-        },
-        "additionalProperties": false
-      },
-      "timeout_ms": 30000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never"
-    },
-    "read_samples": {
-      "binding": {
-        "kind": "adapter",
-        "key": "read_samples"
-      },
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "column_count": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 2047
-          },
-          "prescale": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "trigger_word": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2047
-          }
-        },
-        "required": [
-          "column_count"
-        ],
-        "additionalProperties": false
-      },
-      "timeout_ms": 30000,
-      "side_effect": "none",
-      "cancellable": true,
-      "retry": "never"
-    },
-    "otdp.logic_analyser.configure/1.0.0": {
-      "timeout_ms": 5000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never",
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "configuration_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "channels": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "channel": {
-                  "type": "string",
-                  "pattern": "^[a-z][a-z0-9_]*$"
-                },
-                "threshold_v": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "channel",
-                "threshold_v"
-              ],
-              "additionalProperties": false
-            },
-            "minItems": 1
-          },
-          "sample_rate_hz": {
-            "type": "number",
-            "exclusiveMinimum": 0
-          },
-          "sample_count": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 1000000
-          },
-          "trigger": {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "enum": [
-                  "immediate",
-                  "software",
-                  "external",
-                  "edge"
-                ]
-              },
-              "source_channel": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9_]*$"
-              },
-              "slope": {
-                "enum": [
-                  "rising",
-                  "falling"
-                ]
-              },
-              "level_v": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "kind"
-            ],
-            "additionalProperties": false,
-            "allOf": [
-              {
-                "if": {
-                  "properties": {
-                    "kind": {
-                      "const": "edge"
-                    }
-                  },
-                  "required": [
-                    "kind"
-                  ]
-                },
-                "then": {
-                  "required": [
-                    "source_channel",
-                    "slope",
-                    "level_v"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "kind": {
-                      "const": "external"
-                    }
-                  },
-                  "required": [
-                    "kind"
-                  ]
-                },
-                "then": {
-                  "required": [
-                    "source_channel"
-                  ]
-                }
-              }
+    "integration": {
+        "mode": "adapter",
+        "adapter": {
+            "entry_point": "logicport_plugin.adapter:create_plugin",
+            "api_version": "1.1",
+            "version": "0.1.0",
+            "dependencies": [],
+            "permissions": [
+                "scoped_transport"
             ]
-          }
-        },
-        "required": [
-          "configuration_id",
-          "channels",
-          "sample_rate_hz",
-          "sample_count",
-          "trigger"
-        ],
-        "additionalProperties": false,
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "urn:otdp:action:logic_analyser.configure:1.0.0:input"
-      },
-      "binding": {
-        "kind": "adapter",
-        "key": "otdp.logic_analyser.configure/1.0.0"
-      }
+        }
     },
-    "otdp.logic_analyser.arm/1.0.0": {
-      "timeout_ms": 5000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never",
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "configuration_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "acquisition_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "max_duration_ms": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        "required": [
-          "configuration_id",
-          "acquisition_id",
-          "max_duration_ms"
-        ],
-        "additionalProperties": false,
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "urn:otdp:action:logic_analyser.arm:1.0.0:input"
-      },
-      "binding": {
-        "kind": "adapter",
-        "key": "otdp.logic_analyser.arm/1.0.0"
-      }
+    "transport": {
+        "type": "custom",
+        "connection_key": "logicport",
+        "settings": {
+            "protocol_reference": "LogicPort-Protocol.md section 3 wire framing; ftdi_control dialect pending a pinned transport-provider contract"
+        }
     },
-    "otdp.logic_analyser.fetch/1.0.0": {
-      "timeout_ms": 30000,
-      "side_effect": "none",
-      "cancellable": true,
-      "retry": "never",
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "acquisition_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "max_bytes": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "allow_partial": {
-            "type": "boolean"
-          }
+    "capabilities": [
+        "identify",
+        "read",
+        "write",
+        "invoke",
+        "reset"
+    ],
+    "operations": {
+        "identify": {
+            "timeout_ms": 1000,
+            "side_effect": "none",
+            "retry": "idempotent",
+            "cancellable": true,
+            "completion": "acknowledged"
         },
-        "required": [
-          "acquisition_id",
-          "max_bytes",
-          "allow_partial"
-        ],
-        "additionalProperties": false,
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "urn:otdp:action:logic_analyser.fetch:1.0.0:input"
-      },
-      "binding": {
-        "kind": "adapter",
-        "key": "otdp.logic_analyser.fetch/1.0.0"
-      }
-    },
-    "otdp.logic_analyser.abort/1.0.0": {
-      "timeout_ms": 5000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "idempotent",
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "acquisition_id": {
-            "type": "string",
-            "minLength": 1
-          }
+        "read": {
+            "timeout_ms": 2500,
+            "side_effect": "none",
+            "retry": "never",
+            "cancellable": true,
+            "completion": "acknowledged"
         },
-        "required": [
-          "acquisition_id"
-        ],
-        "additionalProperties": false,
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "urn:otdp:action:logic_analyser.abort:1.0.0:input"
-      },
-      "binding": {
-        "kind": "adapter",
-        "key": "otdp.logic_analyser.abort/1.0.0"
-      }
-    },
-    "set_trigger_position": {
-      "timeout_ms": 5000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never",
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "position": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 65535
-          },
-          "mode_flag": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1
-          },
-          "clock_type": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 3
-          }
+        "write": {
+            "timeout_ms": 1000,
+            "side_effect": "state_change",
+            "retry": "never",
+            "cancellable": true,
+            "completion": "dispatched"
         },
-        "required": [
-          "position",
-          "mode_flag",
-          "clock_type"
-        ],
-        "additionalProperties": false
-      },
-      "binding": {
-        "kind": "adapter",
-        "key": "set_trigger_position"
-      }
+        "invoke": {
+            "timeout_ms": 60000,
+            "side_effect": "state_change",
+            "retry": "never",
+            "cancellable": true,
+            "completion": "acknowledged"
+        },
+        "reset": {
+            "timeout_ms": 5000,
+            "side_effect": "state_change",
+            "retry": "idempotent",
+            "cancellable": true,
+            "completion": "acknowledged"
+        }
     },
-    "configure_sequencer": {
-      "timeout_ms": 10000,
-      "side_effect": "state_change",
-      "cancellable": true,
-      "retry": "never",
-      "input_constraints": {
-        "type": "object",
-        "properties": {
-          "segment": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1
-          },
-          "terms": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 3
+    "parameters": [
+        {
+            "name": "rate_word",
+            "description": "Packed C1/C2 rate and clock-select word (LogicPort-Protocol.md section 3.1); the Hz-to-rate-value conversion is an open item",
+            "type": "int",
+            "access": "rw",
+            "semantic": "configuration",
+            "unit": "count",
+            "range": [
+                0,
+                4294967295
+            ],
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "rate_word"
             },
-            "minItems": 34,
-            "maxItems": 34
-          },
-          "state_terms_active": {
-            "type": "boolean"
-          },
-          "term_type": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255
-          },
-          "dwell1": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1099511627775
-          },
-          "condition_mask_a": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1099511627775
-          },
-          "condition_mask_b": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1099511627775
-          },
-          "state_mask_a": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1099511627775
-          },
-          "state_mask_b": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1099511627775
-          },
-          "control": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255
-          },
-          "match_mask": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255
-          },
-          "param1": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 4294967295
-          },
-          "param1_dword": {
-            "type": "boolean"
-          },
-          "param2": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 4294967295
-          },
-          "param2_dword": {
-            "type": "boolean"
-          },
-          "flag": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255
-          },
-          "match_and": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255
-          },
-          "control2": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255
-          }
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            },
+            "write_policy": {
+                "effect": "setting",
+                "completion": "dispatched",
+                "retry": "never"
+            }
         },
-        "required": [
-          "segment",
-          "terms",
-          "state_terms_active"
+        {
+            "name": "threshold_v",
+            "description": "Input threshold in volts; converts to the 10-bit DAC code of LogicPort-Protocol.md section 5a (about 14.3 mV per code)",
+            "type": "float",
+            "access": "rw",
+            "semantic": "setpoint",
+            "unit": "V",
+            "range": [
+                -6.0,
+                6.0
+            ],
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "threshold_v"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            },
+            "write_policy": {
+                "effect": "setting",
+                "completion": "dispatched",
+                "retry": "never"
+            }
+        },
+        {
+            "name": "status",
+            "description": "Status byte of register 0x100000 (LogicPort-Protocol.md section 5c): bit 0 capture complete, bit 1 immediate trigger, bits 6:5 pre-trigger fill phase",
+            "type": "int",
+            "access": "ro",
+            "semantic": "state",
+            "unit": "count",
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "status"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            }
+        },
+        {
+            "name": "frequency_a",
+            "description": "Frequency-counter channel 0 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "type": "int",
+            "access": "ro",
+            "semantic": "measurement",
+            "unit": "Hz",
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "frequency_a"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            }
+        },
+        {
+            "name": "frequency_b",
+            "description": "Frequency-counter channel 1 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "type": "int",
+            "access": "ro",
+            "semantic": "measurement",
+            "unit": "Hz",
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "frequency_b"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            }
+        },
+        {
+            "name": "frequency_c",
+            "description": "Frequency-counter channel 2 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "type": "int",
+            "access": "ro",
+            "semantic": "measurement",
+            "unit": "Hz",
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "frequency_c"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            }
+        },
+        {
+            "name": "frequency_d",
+            "description": "Frequency-counter channel 3 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "type": "int",
+            "access": "ro",
+            "semantic": "measurement",
+            "unit": "Hz",
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "frequency_d"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            }
+        },
+        {
+            "name": "trigger_position",
+            "description": "Trigger position word of register 0x10000A (LogicPort-Protocol.md section 5b)",
+            "type": "int",
+            "access": "ro",
+            "semantic": "state",
+            "unit": "count",
+            "hazard_class": "none",
+            "binding": {
+                "kind": "adapter",
+                "key": "trigger_position"
+            },
+            "read_policy": {
+                "max_age_ms": 0,
+                "destructive": false
+            }
+        }
+    ],
+    "channels": [
+        {
+            "id": "d0",
+            "label": "D0",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d1",
+            "label": "D1",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d2",
+            "label": "D2",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d3",
+            "label": "D3",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d4",
+            "label": "D4",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d5",
+            "label": "D5",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d6",
+            "label": "D6",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d7",
+            "label": "D7",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d8",
+            "label": "D8",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d9",
+            "label": "D9",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d10",
+            "label": "D10",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d11",
+            "label": "D11",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d12",
+            "label": "D12",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d13",
+            "label": "D13",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d14",
+            "label": "D14",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d15",
+            "label": "D15",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d16",
+            "label": "D16",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d17",
+            "label": "D17",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d18",
+            "label": "D18",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d19",
+            "label": "D19",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d20",
+            "label": "D20",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d21",
+            "label": "D21",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d22",
+            "label": "D22",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d23",
+            "label": "D23",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d24",
+            "label": "D24",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d25",
+            "label": "D25",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d26",
+            "label": "D26",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d27",
+            "label": "D27",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d28",
+            "label": "D28",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d29",
+            "label": "D29",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d30",
+            "label": "D30",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "d31",
+            "label": "D31",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "clk1",
+            "label": "CLK1 (ch32)",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        },
+        {
+            "id": "clk2",
+            "label": "CLK2 (ch33)",
+            "role": "digital_input",
+            "quantities": [
+                "logic_state"
+            ],
+            "parameter_names": []
+        }
+    ],
+    "capture_formats": [
+        "raw_binary"
+    ],
+    "capture_limits": {
+        "max_samples": 2048,
+        "max_bytes": 10240
+    },
+    "required_features": [
+        "otdp.core/0.1.0",
+        "otdp.adapter/0.1.0",
+        "otdp.profile_actions/0.1.0",
+        "otdp.measurement/0.1.0"
+    ],
+    "provenance": {
+        "sources": [
+            {
+                "title": "LogicPort USB protocol reverse-engineering record",
+                "reference": "LogicPort-Protocol.md",
+                "revision": "2026-10-12"
+            },
+            {
+                "title": "FPGA loader hardware result (DONE asserted, slot 0)",
+                "reference": "LogicPort-Protocol.md section 9",
+                "revision": "2026-10-12"
+            }
         ],
-        "additionalProperties": false
-      },
-      "binding": {
-        "kind": "adapter",
-        "key": "configure_sequencer"
-      }
+        "test_vectors": [
+            {
+                "id": "logicport-wire",
+                "path": "vectors.json",
+                "purpose": "Wire-protocol exchange rehearsal: status poll, trigger position, sample-plane reads and stop"
+            }
+        ]
+    },
+    "profiles": [
+        "intronix.logicport/1.0.0",
+        "otdp.logic_analyser/1.0.0"
+    ],
+    "contracts": [
+        {
+            "id": "urn:logicport:profile:1.0.0",
+            "path": "logicport-profile.json",
+            "sha256": "75db8566519216a2591fde2864d204d1b8391c4170684e44791e226e852d456d"
+        },
+        {
+            "id": "urn:otdp:measurement:0.2.2",
+            "path": "otdp-measurement.schema.json",
+            "sha256": "7905795bed6139b9705edfa17b7a17226b99cddda6656030d73bb63dc998a4b3"
+        }
+    ],
+    "actions": {
+        "configure_fpga": {
+            "binding": {
+                "kind": "adapter",
+                "key": "configure_fpga"
+            },
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "ccf_path": {
+                        "type": "string"
+                    },
+                    "slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 7
+                    },
+                    "attempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                    },
+                    "init_timeout_ms": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                }
+            },
+            "timeout_ms": 60000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never"
+        },
+        "set_trigger": {
+            "binding": {
+                "kind": "adapter",
+                "key": "set_trigger"
+            },
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "mask_a": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 17179869183
+                    },
+                    "mask_b": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 17179869183
+                    }
+                },
+                "required": [
+                    "mask_a",
+                    "mask_b"
+                ]
+            },
+            "timeout_ms": 5000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never"
+        },
+        "stop": {
+            "binding": {
+                "kind": "adapter",
+                "key": "stop"
+            },
+            "input_constraints": {
+                "type": "object",
+                "properties": {}
+            },
+            "timeout_ms": 1000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "idempotent"
+        },
+        "resync": {
+            "binding": {
+                "kind": "adapter",
+                "key": "resync"
+            },
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "attempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                    }
+                }
+            },
+            "timeout_ms": 30000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never"
+        },
+        "read_samples": {
+            "binding": {
+                "kind": "adapter",
+                "key": "read_samples"
+            },
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "column_count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2047
+                    },
+                    "prescale": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "trigger_word": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2047
+                    }
+                },
+                "required": [
+                    "column_count"
+                ]
+            },
+            "timeout_ms": 30000,
+            "side_effect": "none",
+            "cancellable": true,
+            "retry": "never"
+        },
+        "otdp.logic_analyser.configure/1.0.0": {
+            "timeout_ms": 5000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "configuration_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "channels": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "channel": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9_]*$"
+                                },
+                                "threshold_v": {
+                                    "type": "number"
+                                }
+                            },
+                            "required": [
+                                "channel",
+                                "threshold_v"
+                            ]
+                        },
+                        "minItems": 1
+                    },
+                    "sample_rate_hz": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                    },
+                    "sample_count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000
+                    },
+                    "trigger": {
+                        "type": "object",
+                        "properties": {
+                            "kind": {
+                                "enum": [
+                                    "immediate",
+                                    "software",
+                                    "external",
+                                    "edge"
+                                ]
+                            },
+                            "source_channel": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]*$"
+                            },
+                            "slope": {
+                                "enum": [
+                                    "rising",
+                                    "falling"
+                                ]
+                            },
+                            "level_v": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "kind"
+                        ]
+                    }
+                },
+                "required": [
+                    "configuration_id",
+                    "channels",
+                    "sample_rate_hz",
+                    "sample_count",
+                    "trigger"
+                ]
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "otdp.logic_analyser.configure/1.0.0"
+            }
+        },
+        "otdp.logic_analyser.arm/1.0.0": {
+            "timeout_ms": 5000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "configuration_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "acquisition_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "max_duration_ms": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "required": [
+                    "configuration_id",
+                    "acquisition_id",
+                    "max_duration_ms"
+                ]
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "otdp.logic_analyser.arm/1.0.0"
+            }
+        },
+        "otdp.logic_analyser.fetch/1.0.0": {
+            "timeout_ms": 30000,
+            "side_effect": "none",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "acquisition_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "max_bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "allow_partial": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "acquisition_id",
+                    "max_bytes",
+                    "allow_partial"
+                ]
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "otdp.logic_analyser.fetch/1.0.0"
+            }
+        },
+        "otdp.logic_analyser.abort/1.0.0": {
+            "timeout_ms": 5000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "idempotent",
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "acquisition_id": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "acquisition_id"
+                ]
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "otdp.logic_analyser.abort/1.0.0"
+            }
+        },
+        "set_trigger_position": {
+            "timeout_ms": 5000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "position": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                    },
+                    "mode_flag": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1
+                    },
+                    "clock_type": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                    }
+                },
+                "required": [
+                    "position",
+                    "mode_flag",
+                    "clock_type"
+                ]
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "set_trigger_position"
+            }
+        },
+        "configure_sequencer": {
+            "timeout_ms": 10000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never",
+            "input_constraints": {
+                "type": "object",
+                "properties": {
+                    "segment": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1
+                    },
+                    "terms": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 3
+                        },
+                        "minItems": 34,
+                        "maxItems": 34
+                    },
+                    "state_terms_active": {
+                        "type": "boolean"
+                    },
+                    "term_type": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                    },
+                    "dwell1": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1099511627775
+                    },
+                    "condition_mask_a": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1099511627775
+                    },
+                    "condition_mask_b": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1099511627775
+                    },
+                    "state_mask_a": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1099511627775
+                    },
+                    "state_mask_b": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1099511627775
+                    },
+                    "control": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                    },
+                    "match_mask": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                    },
+                    "param1": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4294967295
+                    },
+                    "param1_dword": {
+                        "type": "boolean"
+                    },
+                    "param2": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4294967295
+                    },
+                    "param2_dword": {
+                        "type": "boolean"
+                    },
+                    "flag": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                    },
+                    "match_and": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                    },
+                    "control2": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                    }
+                },
+                "required": [
+                    "segment",
+                    "terms",
+                    "state_terms_active"
+                ]
+            },
+            "binding": {
+                "kind": "adapter",
+                "key": "configure_sequencer"
+            }
+        }
     }
-  }
 }

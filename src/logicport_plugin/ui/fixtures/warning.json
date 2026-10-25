@@ -4,56 +4,7 @@
   "title": "LogicPort warning state",
   "description": "Synthetic preview fixture for the LogicPort plugin; not a hardware observation",
   "timestamp_strategy": "fixed",
-  "bindings": [
-    {
-      "id": "status",
-      "value": 224,
-      "unit": "count",
-      "quality": "simulated",
-      "freshness_ms": 0,
-      "provenance": "Generated SDK fixture; 224 (0xE0) echoes the 2026-10-12 device status capture shape"
-    },
-    {
-      "id": "trigger_position",
-      "value": 2039,
-      "unit": "count",
-      "quality": "simulated",
-      "freshness_ms": 0,
-      "provenance": "Generated SDK fixture; 0x7F7 leaves an 8-column capture window"
-    },
-    {
-      "id": "frequency_a",
-      "value": 1000000,
-      "unit": "Hz",
-      "quality": "simulated",
-      "freshness_ms": 0,
-      "provenance": "Generated SDK fixture; 1 MHz = count 100000 x 10"
-    },
-    {
-      "id": "frequency_b",
-      "value": 125000,
-      "unit": "Hz",
-      "quality": "simulated",
-      "freshness_ms": 0,
-      "provenance": "Generated SDK fixture; not a hardware observation"
-    },
-    {
-      "id": "frequency_c",
-      "value": 0,
-      "unit": "Hz",
-      "quality": "simulated",
-      "freshness_ms": 0,
-      "provenance": "Generated SDK fixture; zero frequency displays the >100ms period floor"
-    },
-    {
-      "id": "frequency_d",
-      "value": 10000000,
-      "unit": "Hz",
-      "quality": "simulated",
-      "freshness_ms": 0,
-      "provenance": "Generated SDK fixture; not a hardware observation"
-    }
-  ],
+  "bindings": [],
   "permissions": [
     "observer"
   ],
