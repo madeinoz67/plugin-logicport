@@ -324,3 +324,22 @@ frequency-count payload values are the rehearsal scenario's
 steady-signal fixtures, not probe recordings; the frames around them
 are the hardware shapes. The FTDI control dialect is not rehearseable
 on the mock — it needs a real transport.
+
+## Wire facts addendum, 2026-10-28 (issue #562, hardware session)
+
+Dated addendum; the frozen sections above are superseded only where named.
+Full probe logs and analysis: the parent record's section 10 addendum and
+issue #562's comment trail.
+
+- The resync flush (3.4) is required after configuration for a stable command
+  dialect; the 0x01 marker echoes back.
+- A third dialect exists: the EE state (`EE 00 <counter>`, no payload), a
+  four-slot round robin (~800 ms/cycle) after select writes or desync; it did
+  not resolve to C2 within 15 s of gate polling.
+- Line filler bursts (F8/EC/E0 class) follow configuration AND resync; ACKs
+  queue behind filler — drain before every parse.
+- The command counter survives USB reset; it restarts at zero on
+  reconfiguration.
+- No counter data appeared at any single-page register candidate with a 1 kHz
+  signal present. The frequency-read frame sequence is an open item owned by
+  static decode of the Windows application (with StartAcquisition).
