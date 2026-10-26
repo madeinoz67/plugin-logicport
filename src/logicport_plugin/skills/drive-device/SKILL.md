@@ -64,11 +64,20 @@ Supported verbs and their shapes:
   fifteen-row sequencer plan for segment 0 or 1; terms pack
   most-significant-first over 34 channels.
 - `invoke` `{"action_id": "otdp.logic_analyser.configure/1.0.0", ...}` —
-  stores the class configuration; device-side threshold and rate writes
-  stay pending (open items) and the deferral rides the evidence record.
+  REFUSES with `UNSUPPORTED`: the class-rate destination is not decoded,
+  so configure would echo an effective configuration the device never
+  received (2026-10-12 coordinator ruling; `write threshold_v` serves
+  the standalone threshold write). The earlier sentence here claiming
+  this action "stores the class configuration" never matched the landed
+  adapter — retracted, dated 2026-10-26, issue #562. Device-side
+  threshold and rate writes stay pending (open items) and the deferral
+  rides the evidence record.
 - `invoke` `{"action_id": "otdp.logic_analyser.arm/1.0.0", ...}` —
-  registers the acquisition and reports the device's arm state
-  (armed/running/complete) from the status byte.
+  REFUSES with `UNSUPPORTED` until a state source is proven: the
+  status-bit decode is retracted, dated 2026-10-26, issue #562 (the
+  recorded bits were the counter), so no armed/running/complete state is
+  derivable from the wire, and the vendored arm output schema forbids an
+  unknown state.
 - `invoke` `{"action_id": "otdp.logic_analyser.fetch/1.0.0", "input":
   {"acquisition_id": ..., "max_bytes": ..., "allow_partial": ...}}` —
   polls the capture, drains the planes, RLE-decodes, and returns an

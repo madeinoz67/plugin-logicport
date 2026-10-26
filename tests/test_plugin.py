@@ -9,7 +9,10 @@ absence means — that run carries no end-to-end load evidence.
 import asyncio
 import json
 from importlib.resources import files
+from pathlib import Path
 
+import benchweave_sdk
+import jsonschema
 import pytest
 from benchweave_sdk.conformance import check_lifecycle
 from benchweave_sdk.testing import MockContext, MockHost
@@ -1423,6 +1426,38 @@ def test_class_arm_refuses_without_a_proven_state():
         assert host.transfers == []
         await plugin.close(context)
     asyncio.run(run())
+
+
+def test_arm_state_unknown_violates_the_vendored_output_schema():
+    """R19 evidence (lane B's technique, made permanent): the SDK-pinned
+    otdp 0.2.2 device-profile-catalog arm output_schema enumerates
+    state as armed|running|complete with additionalProperties:false —
+    the pre-fix arm result ``{"acquisition_id", "state": "unknown"}`` is
+    rejected, which is exactly why the adapter refuses UNSUPPORTED
+    instead of emitting one."""
+    catalog_path = (
+        Path(benchweave_sdk.__file__).parent
+        / "standards"
+        / "otdp"
+        / "0.2.2"
+        / "device-profile-catalog.json"
+    )
+    catalog = json.loads(catalog_path.read_text())
+    output_schema = catalog["actions"]["otdp.logic_analyser.arm/1.0.0"][
+        "output_schema"
+    ]
+    assert output_schema["properties"]["state"]["enum"] == [
+        "armed", "running", "complete",
+    ]
+    assert output_schema["additionalProperties"] is False
+    validator = jsonschema.Draft202012Validator(output_schema)
+    # The pre-fix arm output row: schema-REJECTED (the R19 defect).
+    assert not validator.is_valid(
+        {"acquisition_id": "acq-1", "state": "unknown"}
+    )
+    # The three proven states are the schema's whole vocabulary.
+    for state in ("armed", "running", "complete"):
+        validator.validate({"acquisition_id": "acq-1", "state": state})
 
 
 def test_class_fetch_builds_a_conforming_dataset():

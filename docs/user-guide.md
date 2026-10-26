@@ -73,7 +73,7 @@ Follow these steps to capture signals:
 3. Configure the sample rate and the threshold.
 4. Set the trigger terms. The device has four trigger levels.
 5. Start the capture. The plugin loads the FPGA design, arms the device, and waits for the trigger.
-6. Read the status. The capture is complete when status bit 0 is 1.
+6. Read the status. The status value is the command counter. The capture-complete decode ("status bit 0 is 1") is retracted, dated 2026-10-26, issue #562 — the recorded bits were the counter, and no completion gate is proven; the plugin drains the sample data when you fetch it.
 7. Read the sample data. The plugin decodes the 34 channels for you.
 
 The device stores 2048 sample columns for 34 channels. The sample data uses run-length encoding. The plugin expands the runs to the real sample times.
