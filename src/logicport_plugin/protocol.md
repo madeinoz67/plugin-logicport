@@ -119,10 +119,15 @@ longer than 75 ms (adapter floor: 100 ms). The `read frequency_a..d`
 operations hold a counter lock for the whole select/gate/count sequence
 (an interleaved pair would return the wrong channel's count tagged
 valid), re-poll a not-ready gate only after the 100 ms floor, and read;
-the mux write is a device side effect the verb-wide read policy cannot
-declare (disclosed in the parameter descriptions; standards gap). The
-counter registers were never probed on hardware — the decode comes from
-the static analysis of `LogicPort.exe`.
+the mux write is a device side effect each counter parameter declares
+through `read_policy.side_effect: "state_change"`, which escalates the
+read verb to `state_change` (OTDP 0.2.4 rule S20 — the corpus this
+descriptor pins). The escalation is verb-wide: reads of side-effect-free
+parameters inherit the `state_change` declaration too, a conservative
+over-classification the schema permits; per-read granularity does not
+exist, and that is the residual limit. The counter registers were never
+probed on hardware — the decode comes from the static analysis of
+`LogicPort.exe`.
 
 ## Reader bounds, trigger position, sequencer (record: confirmed)
 

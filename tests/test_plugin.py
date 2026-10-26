@@ -893,7 +893,7 @@ def test_class_fetch_builds_a_conforming_dataset():
         dataset = result["data"]["result"]
         from benchweave_sdk.validation import validate as validate_doc
 
-        validate_doc(dataset, "otdp/0.2.2/otdp-measurement.schema.json")
+        validate_doc(dataset, "otdp/0.2.4/otdp-measurement.schema.json")
         assert dataset["dataset_id"] == "ds-1"
         assert dataset["kind"] == "digital_trace"
         assert dataset["acquisition_id"] == "acq-1"

@@ -627,15 +627,16 @@ def trigger_column_compensated(column_count: int, trigger_word: int, pipeline: i
 # --- Hardware-observed reply grammar (record section 10, 2026-10-26) -------
 #
 # Read-only probes of the live device (tools/addr_probe.c reads,
-# tools/write_probe.c writes; no register writes). These constants record
+# tools/write_probe.c writes; no register writes). This section records
 # OBSERVED WIRE SHAPE only: every probed address returned zero data, so no
-# register value, page bit or status bit is confirmed by them. The adapter
-# does not yet parse this grammar — its C2 exchanges still receive n raw
-# bytes per the static decode; adopting the observed shape is future work
-# gated on a register-data probe.
+# register value, page bit or status bit is confirmed by it. The adapter
+# does not yet consume this grammar — its C2 exchanges still receive n
+# raw bytes per the static decode; adopting the observed shape is future
+# work gated on a register-data probe.
 
-#: A read reply runs the requested count plus this four-byte header:
-#: the C2 echo, a zero byte, a command counter, then the data bytes.
+#: A read reply runs the requested count plus four bytes: `C2`, `00`, the
+#: command counter, then count+1 data bytes (the data region mirrors the
+#: C1 payload's L+1 convention). Every probed address answered zeros.
 READ_REPLY_HEADER_BYTES = 4
 #: A write ACK is exactly three bytes: C1, a zero byte, the same command
 #: counter the read replies carry. The ACK-shape open item is closed at
@@ -645,6 +646,72 @@ WRITE_ACK_BYTES = 3
 #: (record section 10): poll loops pace at this cadence — observed once,
 #: not established as a requirement.
 WRITE_ACK_LATENCY_MS = 119
+
+
+def read_reply_length(count: int) -> int:
+    """The observed read-reply length: the requested count plus four."""
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        raise ValueError("count must be a positive int")
+    return count + READ_REPLY_HEADER_BYTES
+
+
+def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
+    """Split an observed read reply into ``(counter, data)``.
+
+    The frame is ``C2 00 <counter>`` then count+1 data bytes; the total
+    length is the requested count plus four. The data bytes come back
+    verbatim — nothing here decodes register values (every probed
+    address answered zeros; the status/register layer is not
+    hardware-decoded, record section 10).
+    """
+    if not isinstance(data, bytes):
+        raise ValueError("a reply is bytes")
+    expected = read_reply_length(count)
+    if len(data) != expected:
+        raise ValueError(
+            f"a read reply of count {count} is exactly {expected} bytes, got {len(data)}"
+        )
+    if data[0] != CMD_READ:
+        raise ValueError("a read reply echoes C2")
+    if data[1] != 0x00:
+        raise ValueError("read-reply byte 1 is 00 on every observed frame")
+    return data[2], data[3:]
+
+
+def parse_write_ack(data: bytes) -> int:
+    """Validate an observed write ACK; returns the command counter.
+
+    The ACK is exactly three bytes: ``C1 00 <counter>``. The counter is
+    the same one the read replies carry.
+    """
+    if not isinstance(data, bytes):
+        raise ValueError("an ACK is bytes")
+    if len(data) != WRITE_ACK_BYTES:
+        raise ValueError(f"a write ACK is exactly {WRITE_ACK_BYTES} bytes, got {len(data)}")
+    if data[0] != CMD_WRITE:
+        raise ValueError("a write ACK echoes C1")
+    if data[1] != 0x00:
+        raise ValueError("write-ACK byte 1 is 00 on every observed frame")
+    return data[2]
+
+
+def counter_step(previous: int, current: int) -> str:
+    """Classify one step of the shared command counter.
+
+    HYPOTHESIS (record section 10): one counter covers reads and writes,
+    so ``"ok"`` (a contiguous step) is the only healthy transition, a
+    ``"gap"`` means a lost frame, and a ``"repeat"`` means a duplicated
+    one. The wrap behaviour is unknown — only 0x35 to 0x50 was ever
+    observed — so a wrap reports as a gap rather than being decoded.
+    """
+    for name, value in (("previous", previous), ("current", current)):
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFF:
+            raise ValueError(f"{name} must be a byte")
+    if current == previous:
+        return "repeat"
+    if current == previous + 1:
+        return "ok"
+    return "gap"
 
 
 # --- Section 8.1 stream transactions and the FTDI control dialect ---------

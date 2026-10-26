@@ -349,6 +349,60 @@ def test_hardware_observed_reply_grammar():
     assert proto.WRITE_ACK_LATENCY_MS == 119
 
 
+def test_read_reply_length_rule():
+    # The reply runs the requested count plus four bytes.
+    for count in (1, 4, 8, 0x7FF):
+        assert proto.read_reply_length(count) == count + proto.READ_REPLY_HEADER_BYTES
+
+
+def test_parse_read_reply_shape():
+    # The observed frame: C2, 00, counter, then count+1 data bytes
+    # (zeros on every probe) — the data region mirrors the C1 L+1
+    # convention. Total length is the requested count plus four.
+    frame = bytes([0xC2, 0x00, 0x35]) + b"\x00" * 5
+    counter, data = proto.parse_read_reply(frame, 4)
+    assert counter == 0x35
+    assert data == b"\x00" * 5
+    # The data bytes are returned verbatim; nothing decodes them.
+    frame = bytes([0xC2, 0x00, 0x36]) + b"\x01\x02\x03\x04"
+    counter, data = proto.parse_read_reply(frame, 3)
+    assert counter == 0x36
+    assert data == b"\x01\x02\x03\x04"
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC1, 0x00, 0x37]) + b"\x00" * 5, 4)  # wrong echo
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC2, 0x01, 0x37]) + b"\x00" * 5, 4)  # byte 1 not 00
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC2, 0x00, 0x37]) + b"\x00" * 4, 4)  # short
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC2, 0x00, 0x37]) + b"\x00" * 6, 4)  # long
+
+
+def test_parse_write_ack_shape():
+    # Exactly three bytes: C1, 00, the command counter.
+    assert proto.parse_write_ack(bytes([0xC1, 0x00, 0x3C])) == 0x3C
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(bytes([0xC1, 0x00, 0x3C, 0x00]))  # too long
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(bytes([0xC2, 0x00, 0x3C]))  # wrong echo
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(bytes([0xC1, 0x01, 0x3C]))  # byte 1 not 00
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(b"")  # empty
+
+
+def test_command_counter_continuity():
+    """One counter covers reads and writes (record section 10): a
+    contiguous step is ok, a skipped value means a lost frame, a repeat
+    means a duplicate. The wrap behaviour is unknown — only 0x35..0x50
+    was ever observed — so wrap is reported as a gap, not decoded."""
+    assert proto.counter_step(0x35, 0x36) == "ok"
+    assert proto.counter_step(0x4E, 0x4F) == "ok"
+    assert proto.counter_step(0x3B, 0x3D) == "gap"  # one command lost
+    assert proto.counter_step(0x3C, 0x3C) == "repeat"  # duplicate frame
+    assert proto.counter_step(0xFF, 0x00) == "gap"  # wrap unknown: reported, not decoded
+
+
 def test_frequency_round_robin_lag_plan():
     # One-iteration lag: select N+1, then read N, over the four channels.
     plan = proto.freq_round_robin(4)

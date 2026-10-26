@@ -4,11 +4,17 @@ A declared surface the adapter refuses is a lie the host schedules around:
 ``side_effect`` drives concurrency and an advertised action is expected to
 run. These tests pin the agreement both ways — every adapter-bound action
 declared in the descriptor is served by the adapter, and every channel the
-adapter serves is declared with the parameters that serve it.
+adapter serves is declared with the parameters that serve it. The counter
+reads declare their mux-select write through ``read_policy.side_effect``
+and the read verb escalates with them (OTDP 0.2.3+ S20).
 """
 
+import hashlib
 import json
 from importlib.resources import files
+
+import pytest
+from benchweave_sdk.validation import validate_descriptor
 
 from logicport_plugin.adapter import (
     _FREQUENCY_SLOTS,
@@ -19,6 +25,58 @@ from logicport_plugin.adapter import (
 
 def _descriptor():
     return json.loads(files("logicport_plugin").joinpath("descriptor.json").read_text())
+
+
+def _package_bytes(name):
+    return files("logicport_plugin").joinpath(name).read_bytes()
+
+
+def test_counter_reads_declare_state_change():
+    """The mux select is a write on every counter read; the descriptor
+    says so through the parameter's own read policy, and the read verb
+    carries the escalated maximum (S20)."""
+    descriptor = _descriptor()
+    frequency = {
+        row["name"]: row
+        for row in descriptor.get("parameters", [])
+        if row["name"].startswith("frequency_")
+    }
+    assert set(frequency) == set(_FREQUENCY_SLOTS)
+    for name, row in frequency.items():
+        assert row.get("read_policy", {}).get("side_effect") == "state_change", name
+    assert descriptor["operations"]["read"]["side_effect"] == "state_change"
+
+
+def test_read_verb_escalation_refuses_underclassification():
+    """S20: with any parameter declaring a state-changing read, a read
+    verb pinned to ``none`` is refused by the schema, not just frowned
+    on."""
+    descriptor = json.loads(json.dumps(_descriptor()))
+    descriptor["operations"]["read"]["side_effect"] = "none"
+    with pytest.raises(ValueError):
+        validate_descriptor(descriptor)
+
+
+def test_measurement_contract_pins_the_declared_corpus():
+    """The pinned measurement contract names the descriptor's OTDP
+    version, the package copy is those exact corpus bytes, and the pinned
+    digest is the copy's real SHA-256."""
+    descriptor = _descriptor()
+    version = descriptor["otdp_version"]
+    row = next(
+        contract
+        for contract in descriptor["contracts"]
+        if contract["id"].startswith("urn:otdp:measurement:")
+    )
+    assert row["id"] == f"urn:otdp:measurement:{version}"
+    package_bytes = _package_bytes("otdp-measurement.schema.json")
+    assert hashlib.sha256(package_bytes).hexdigest() == row["sha256"]
+    vendored = files("benchweave_sdk").joinpath(
+        f"standards/otdp/{version}/otdp-measurement.schema.json"
+    ).read_bytes()
+    assert package_bytes == vendored, (
+        f"the package measurement copy is not the {version} corpus bytes"
+    )
 
 
 def test_every_declared_action_is_served():

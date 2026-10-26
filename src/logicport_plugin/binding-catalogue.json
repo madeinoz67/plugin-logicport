@@ -1,6 +1,6 @@
 {
   "contract_version": "0.4.0",
-  "descriptor_sha256": "73d535e76e54baf75ba747b8b9edb0ec0912d20961c5dcb19d2fe9e867581e49",
+  "descriptor_sha256": "b2e9d4da8346298d060e6a100d0adfdb08524713583c8f6f0adec5b29d74dc4b",
   "targets": [
     {
       "id": "capture",
@@ -9,7 +9,7 @@
       "profile_ids": [
         "otdp.logic_analyser/1.0.0"
       ],
-      "measurement_schema_id": "urn:otdp:measurement:0.2.2",
+      "measurement_schema_id": "urn:otdp:measurement:0.2.4",
       "variables": [
         {
           "id": "t",

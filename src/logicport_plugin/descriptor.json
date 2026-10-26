@@ -1,5 +1,5 @@
 {
-    "otdp_version": "0.2.2",
+    "otdp_version": "0.2.4",
     "descriptor_version": "0.1.0",
     "id": "intronix.logicport",
     "display_name": "Intronix LogicPort",
@@ -46,7 +46,7 @@
         },
         "read": {
             "timeout_ms": 2500,
-            "side_effect": "none",
+            "side_effect": "state_change",
             "retry": "never",
             "cancellable": true,
             "completion": "acknowledged"
@@ -145,7 +145,7 @@
         },
         {
             "name": "frequency_a",
-            "description": "Frequency-counter channel 0 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "description": "Frequency-counter channel 0 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000; static decode - the counter registers were never probed on hardware). The read switches the counter multiplexer: declared through read_policy.side_effect: state_change, which escalates the read verb (OTDP S20). The escalation is verb-wide - reads of side-effect-free parameters are declared state_change too, a conservative over-classification the schema permits; per-read granularity does not exist.",
             "type": "int",
             "access": "ro",
             "semantic": "measurement",
@@ -157,12 +157,13 @@
             },
             "read_policy": {
                 "max_age_ms": 0,
-                "destructive": false
+                "destructive": false,
+                "side_effect": "state_change"
             }
         },
         {
             "name": "frequency_b",
-            "description": "Frequency-counter channel 1 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "description": "Frequency-counter channel 1 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000; static decode - the counter registers were never probed on hardware). The read switches the counter multiplexer: declared through read_policy.side_effect: state_change, which escalates the read verb (OTDP S20). The escalation is verb-wide - reads of side-effect-free parameters are declared state_change too, a conservative over-classification the schema permits; per-read granularity does not exist.",
             "type": "int",
             "access": "ro",
             "semantic": "measurement",
@@ -174,12 +175,13 @@
             },
             "read_policy": {
                 "max_age_ms": 0,
-                "destructive": false
+                "destructive": false,
+                "side_effect": "state_change"
             }
         },
         {
             "name": "frequency_c",
-            "description": "Frequency-counter channel 2 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "description": "Frequency-counter channel 2 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000; static decode - the counter registers were never probed on hardware). The read switches the counter multiplexer: declared through read_policy.side_effect: state_change, which escalates the read verb (OTDP S20). The escalation is verb-wide - reads of side-effect-free parameters are declared state_change too, a conservative over-classification the schema permits; per-read granularity does not exist.",
             "type": "int",
             "access": "ro",
             "semantic": "measurement",
@@ -191,12 +193,13 @@
             },
             "read_policy": {
                 "max_age_ms": 0,
-                "destructive": false
+                "destructive": false,
+                "side_effect": "state_change"
             }
         },
         {
             "name": "frequency_d",
-            "description": "Frequency-counter channel 3 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000). The read switches the counter multiplexer: a device side effect the verb-wide read policy cannot declare (standards gap, disclosed here).",
+            "description": "Frequency-counter channel 3 in Hz (count x 10 from register 0x40000001 after the channel select on 0x40000000; static decode - the counter registers were never probed on hardware). The read switches the counter multiplexer: declared through read_policy.side_effect: state_change, which escalates the read verb (OTDP S20). The escalation is verb-wide - reads of side-effect-free parameters are declared state_change too, a conservative over-classification the schema permits; per-read granularity does not exist.",
             "type": "int",
             "access": "ro",
             "semantic": "measurement",
@@ -208,7 +211,8 @@
             },
             "read_policy": {
                 "max_age_ms": 0,
-                "destructive": false
+                "destructive": false,
+                "side_effect": "state_change"
             }
         },
         {
@@ -626,9 +630,9 @@
             "sha256": "75db8566519216a2591fde2864d204d1b8391c4170684e44791e226e852d456d"
         },
         {
-            "id": "urn:otdp:measurement:0.2.2",
+            "id": "urn:otdp:measurement:0.2.4",
             "path": "otdp-measurement.schema.json",
-            "sha256": "7905795bed6139b9705edfa17b7a17226b99cddda6656030d73bb63dc998a4b3"
+            "sha256": "2f7da116b07db4ba06eb72c6d16a5a8d5b13c6a34fe1f6ab01c99fce6a146063"
         }
     ],
     "actions": {
