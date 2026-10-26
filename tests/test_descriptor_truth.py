@@ -57,6 +57,26 @@ def test_read_verb_escalation_refuses_underclassification():
         validate_descriptor(descriptor)
 
 
+def test_read_verb_equals_derived_maximum():
+    """The declared read verb is not an independent claim.
+
+    A JSON Schema conditional cannot rewrite a document — allOf[32]
+    refuses the under-escalated form rather than transforming it — so the
+    verb value is necessarily authored. What is provable is that it
+    equals the maximum over the parameters' read policies (the same
+    quantity allOf[32] enforces): the escalation is derived from the
+    counter declarations, never a standalone assertion.
+    """
+    descriptor = _descriptor()
+    declared = descriptor["operations"]["read"]["side_effect"]
+    policies = [
+        row.get("read_policy", {}).get("side_effect", "none")
+        for row in descriptor["parameters"]
+    ]
+    derived = "state_change" if "state_change" in policies else "none"
+    assert declared == derived
+
+
 def test_measurement_contract_pins_the_declared_corpus():
     """The pinned measurement contract names the descriptor's OTDP
     version, the package copy is those exact corpus bytes, and the pinned
