@@ -2,7 +2,8 @@
 
 MockHost scripts every transfer as an exact transaction; no hardware is
 contacted. The full FPGA-load test needs the real LogicPort.ccf on this
-machine and is skipped where it is absent.
+machine and is skipped where it is absent; the skip reason names what its
+absence means — that run carries no end-to-end load evidence.
 """
 
 import asyncio
@@ -71,9 +72,12 @@ def test_identify_is_static_no_io():
     asyncio.run(run())
 
 
-def test_read_status_hardware_capture():
+def test_read_status_decodes_the_constructed_fixture():
     async def run():
-        # The §9 device capture: C2 STATUS, four bytes E0 E0 E0 E0.
+        # A constructed fixture, NOT a hardware capture: the 2026-10-12
+        # four-byte E0 read is withdrawn evidence (its tool truncates at
+        # four bytes; record section 10), and the status byte is not
+        # hardware-decoded. The value rehearses the static §5c decode.
         host = MockHost(_register_read(proto.frame_c2(0x0000, 4), b"\xe0\xe0\xe0\xe0"))
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
@@ -348,7 +352,9 @@ def test_configure_fpga_requires_a_path():
 
 @pytest.mark.skipif(
     not __import__("pathlib").Path(REAL_CCF).is_file(),
-    reason="the real LogicPort.ccf is not on this machine",
+    reason="no hardware capture in this environment: LOGICPORT_CCF names no "
+    "hardware-proven LogicPort.ccf, so the end-to-end FPGA-load rehearsal "
+    "cannot run and this run carries no end-to-end load evidence",
 )
 def test_configure_fpga_full_pass_real_bitstream():
     """The proven FPGA-load chain over MockHost: DONE asserted end to end."""
@@ -422,7 +428,9 @@ def test_invoke_read_samples_exact_exchange():
     """The vectors.json demo conversation: tp=0, 8 columns, one run column."""
     async def run():
         host = MockHost(
-            _register_read(proto.frame_c2(0x000A, 4), b"\x00\x00\xe0\xe0")
+            # The capture-complete gate: status bit 0 set on the first poll.
+            _register_read(proto.frame_c2(0x0000, 4), b"\x01\x00\x00\x00")
+            + _register_read(proto.frame_c2(0x000A, 4), b"\x00\x00\xe0\xe0")
             + [
                 _frame_send(proto.frame_c2(0x0102, 4)),
                 _exchange(proto.stream_receive(4, 4), {"data": b"\x00\x00\x00\x00"}),
@@ -518,7 +526,8 @@ def test_vectors_match_protocol_builders():
         cycle.append(proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4).hex())
     assert len(rows) == 2 * len(cycle)
     assert [row["request"] for row in rows] == cycle * 2
-    # The status response is the hardware capture of record section 9; the
+    # Every response is a constructed fixture: the status rows' E0 bytes
+    # are withdrawn hardware evidence (record section 10), and the
     # frequency counts decode to the fixture Hz values (count x 10).
     assert rows[0]["response"] == "e0e0e0e0"
     hz = [int.from_bytes(bytes.fromhex(row["response"]), "big") * 10
@@ -672,6 +681,53 @@ def test_read_frequency_rejects_unknown():
         request = _request("read", {"parameter": "frequency_e"})
         result = await plugin.execute(request, context)
         assert result["error"]["code"] == "INVALID_ARGUMENT"
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+def test_invoke_read_counter_channel():
+    """The typed counter read: the execution contract's sanctioned path
+    for a state-changing read (a core read verb declaring state_change is
+    excluded from procedures; this action is what an allow rule admits).
+    One locked sweep of all four channels — the device's round-robin
+    unit, the vectors' exact cycle shape."""
+    async def run():
+        host = MockHost(
+            _freq_script(0) + _freq_script(1) + _freq_script(2) + _freq_script(3)
+        )
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=20.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request("invoke", {"action_id": "read_counter", "input": {}})
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "ok", result
+        assert result["data"]["action_id"] == "read_counter"
+        assert result["data"]["result"] == {
+            "frequencies_hz": {
+                "frequency_a": 1234560,
+                "frequency_b": 1234560,
+                "frequency_c": 1234560,
+                "frequency_d": 1234560,
+            },
+            "unit": "Hz",
+            "quality": "valid",
+            "source": "device",
+        }
+        host.assert_complete()
+        await plugin.close(context)
+        # Stray inputs refuse before any transmit.
+        host = MockHost([])
+        plugin = create_plugin()
+        context = MockContext("op-2", deadline_monotonic=1.0)
+        await plugin.open(_descriptor(), host, context)
+        for bad in ({"channel": "a"}, {"bogus": 1}):
+            request = _request("invoke", {"action_id": "read_counter", "input": bad})
+            result = await plugin.execute(request, context)
+            validate_result(result, request)
+            assert result["error"]["code"] == "INVALID_ARGUMENT", bad
+            assert result["error"]["dispatch_state"] == "not_dispatched"
+        assert host.transfers == []
         await plugin.close(context)
     asyncio.run(run())
 
@@ -884,7 +940,7 @@ def test_class_fetch_builds_a_conforming_dataset():
         dataset = result["data"]["result"]
         from benchweave_sdk.validation import validate as validate_doc
 
-        validate_doc(dataset, "otdp/0.2.2/otdp-measurement.schema.json")
+        validate_doc(dataset, "otdp/0.2.4/otdp-measurement.schema.json")
         assert dataset["dataset_id"] == "ds-1"
         assert dataset["kind"] == "digital_trace"
         assert dataset["acquisition_id"] == "acq-1"
@@ -940,6 +996,330 @@ def test_class_abort_sends_stop():
         validate_result(result, request)
         assert result["status"] == "ok", result
         assert result["data"]["result"] == {"acquisition_id": "acq-1", "state": "aborted"}
+        host.assert_complete()
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+# --- Issue #562 machine-truth round: counter serialization, poll floor,
+# FPGA completion honesty, bitstream send accounting, capture gate. ---
+
+
+class _ParkOnNthHost(MockHost):
+    """Park the caller before serving the Nth transfer until released.
+
+    MockHost serves every transfer without suspending, so two concurrent
+    operations run atomically back to back and never interleave. Parking
+    read A inside its gate exchange — on a future only the test resolves —
+    is the deterministic interleaving point this test owns: read B runs to
+    its next await while A is genuinely suspended.
+    """
+
+    def __init__(self, exchanges, park_before):
+        super().__init__(exchanges)
+        self._served = 0
+        self._park_before = park_before
+        self._release: asyncio.Future | None = None
+
+    async def transfer(self, transaction, context):
+        self._served += 1
+        if self._served == self._park_before and self._release is not None:
+            await self._release
+        return await super().transfer(transaction, context)
+
+
+def test_counter_reads_are_serialized():
+    """One read-select-read sequence cannot interleave with another.
+
+    The counter is a multiplexer: an interleaved pair would tag the wrong
+    channel's count as ``quality: "valid"``. The adapter must serialize the
+    whole select/gate/count sequence.
+    """
+
+    async def run():
+        host = _ParkOnNthHost(_freq_script(0) + _freq_script(1), park_before=3)
+        release = asyncio.get_running_loop().create_future()
+        host._release = release
+        plugin = create_plugin()
+        context_a = MockContext("op-a", deadline_monotonic=20.0)
+        await plugin.open(_descriptor(), host, context_a)
+        context_b = MockContext("op-b", deadline_monotonic=20.0)
+        task_a = asyncio.create_task(
+            plugin.execute(
+                _request("read", {"parameter": "frequency_a"}, operation_id="op-a"), context_a
+            )
+        )
+        while host._served < 3:
+            await asyncio.sleep(0)  # A is parked inside its first gate exchange
+        task_b = asyncio.create_task(
+            plugin.execute(
+                _request("read", {"parameter": "frequency_b"}, operation_id="op-b"), context_b
+            )
+        )
+        await asyncio.sleep(0)  # B runs to its next await (its select or the lock)
+        release.set_result(None)  # A resumes and finishes its sequence
+        result_a, result_b = await asyncio.gather(task_a, task_b)
+        assert result_a["status"] == "ok", result_a
+        assert result_b["status"] == "ok", result_b
+        assert result_a["data"]["parameter"] == "frequency_a"
+        assert result_b["data"]["parameter"] == "frequency_b"
+        assert result_a["data"]["value"] == 1234560
+        assert result_b["data"]["value"] == 1234560
+        host.assert_complete()
+        await plugin.close(context_a)
+    asyncio.run(run())
+
+
+def test_counter_gate_poll_respects_interval_floor(monkeypatch):
+    """A not-ready gate re-polls only after FREQ_POLL_INTERVAL_MIN_MS.
+
+    The record's confirmed floor: counter polls wait longer than 75 ms
+    (adapter floor 100 ms). Hammering the gate register in a tight loop is
+    the unwired-constant defect.
+    """
+
+    async def run():
+        import logicport_plugin.adapter as adapter_module
+
+        host = MockHost(
+            [
+                _frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
+                _quiet_ack(),
+                _frame_send(proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)),
+                _exchange(proto.stream_receive(1, 1), {"data": b"\x01"}),  # count not settled
+                _frame_send(proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)),
+                _exchange(proto.stream_receive(1, 1), {"data": b"\x00"}),  # ready
+                _frame_send(proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT) + 1, 4)),
+                _exchange(proto.stream_receive(4, 4), {"data": b"\x00\x01\xe2\x40"}),
+            ]
+        )
+        waits: list[float] = []
+
+        async def fake_wait(seconds):
+            waits.append(seconds)
+            host.advance(seconds)
+
+        monkeypatch.setattr(adapter_module, "_pace_wait", fake_wait, raising=False)
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=20.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request("read", {"parameter": "frequency_a"})
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "ok", result
+        assert waits, "no pace wait requested between gate polls: the floor constant is unwired"
+        floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
+        assert waits == [floor_s]
+        host.assert_complete()
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+def _synthetic_ccf(tmp_path, slot_len=20000):
+    """A synthetic .ccf with the real container format (invented bytes).
+
+    Nine XOR-obfuscated header values, slot 0 ``slot_len`` bytes, the other
+    seven slots 256 bytes each. Returns the path and the SHA-256 to pin as
+    the adapter's expected digest for the test.
+    """
+    values = [slot_len // 16] + [16] * 7
+    chain = 0
+    for value in values:
+        chain ^= value
+    header = ",".join(str(value ^ proto.CCF_XOR_KEY) for value in values + [chain])
+    body = bytes((index * 7 + 3) & 0xFF for index in range(slot_len + 7 * 256))
+    blob = header.encode("ascii") + b"\n" + body
+    path = tmp_path / "synthetic.ccf"
+    path.write_bytes(blob)
+    import hashlib
+
+    return path, hashlib.sha256(blob).hexdigest()
+
+
+def _fpga_pass_script(bitstream, pins_done_byte, chunk_sends=None, stop_after_chunks=False):
+    """One section 5 pass over a synthetic bitstream.
+
+    ``chunk_sends`` optionally overrides the stream-send reply of the chunk
+    with that index (for short-send rehearsal; None keeps the bare reply).
+    ``stop_after_chunks`` omits the DONE poll and the trailing bit-mode
+    reset — the shape of a pass that fails AT a chunk: the adapter resets
+    the interface itself and never reaches the DONE poll.
+    """
+    transfers = [
+        _exchange(proto.ftdi_purge("rx"), {}),
+        _exchange(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), {}),
+        _exchange(proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), {}),
+        _frame_send(bytes([proto.FPGA_PULSE_START])),
+        _exchange(proto.ftdi_read_pins(), {"data": b"\x00"}),  # DONE cleared
+        _frame_send(bytes([proto.FPGA_BITSTREAM_START])),
+        _exchange(proto.ftdi_read_pins(), {"data": b"\x08"}),  # INIT high
+    ]
+    short_at = None
+    if chunk_sends is not None:
+        short_at = [index for index, sent in enumerate(chunk_sends) if sent is not None]
+    for index, offset in enumerate(range(0, len(bitstream), proto.BITSTREAM_CHUNK_MAX)):
+        chunk = bitstream[offset : offset + proto.BITSTREAM_CHUNK_MAX]
+        if short_at and index in short_at:
+            reply = {"sent": chunk_sends[index]}
+        else:
+            reply = {}
+        transfers.append(_exchange(proto.stream_send(chunk), reply))
+        if short_at and index in short_at and index + 1 == len(short_at) and stop_after_chunks:
+            break
+    if stop_after_chunks:
+        # The failed pass resets the interface mode; no DONE poll follows.
+        transfers.append(_exchange(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), {}))
+        return transfers
+    transfers.append(_exchange(proto.ftdi_read_pins(), {"data": bytes([pins_done_byte])}))
+    transfers.append(_exchange(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), {}))
+    return transfers
+
+
+class _AdvancingPinsHost(MockHost):
+    """Advance the clock before every pin poll so a failing poll exhausts.
+
+    ``_poll_pins`` budgets ``timeout_ms`` on the host clock; advancing 2 s
+    before each pin read makes every NOT-matching poll return False after
+    exactly one read (the default poll budget is 1000 ms).
+    """
+
+    async def transfer(self, transaction, context):
+        if transaction.get("op") == "read_pins":
+            self.advance(2.0)
+        return await super().transfer(transaction, context)
+
+
+def test_configure_fpga_retries_when_done_never_asserts(monkeypatch, tmp_path):
+    """A pass whose DONE never asserts is a FAILED pass, not ok-done-false.
+
+    The C loader retries the whole sequence when DONE does not assert
+    (record section 5); the adapter must do the same.
+    """
+    path, digest = _synthetic_ccf(tmp_path)
+    monkeypatch.setattr(proto, "CCF_SHA256", digest)
+    blob = path.read_bytes()
+    header = proto.parse_ccf_header(blob)
+    bitstream = proto.swap_first_pages(proto.extract_ccf_slot(blob, header, 0))
+
+    async def run():
+        host = _AdvancingPinsHost(
+            _fpga_pass_script(bitstream, pins_done_byte=0x00)  # pass 1: DONE never
+            + _fpga_pass_script(bitstream, pins_done_byte=0x10)  # pass 2: DONE asserts
+            + _init_transfers()
+            + [
+                _exchange(proto.ftdi_purge("tx"), {}),
+                _exchange(proto.ftdi_purge("rx"), {}),
+                _exchange(proto.stream_send(b"\x00" * 65535), {"sent": 65535}),
+                _exchange(proto.stream_send(b"\x00" * 30000), {"sent": 30000}),
+                _exchange(proto.stream_send(b"\x01"), {"sent": 1}),
+                _exchange(proto.ftdi_purge("tx"), {}),
+                _exchange(proto.ftdi_purge("rx"), {}),
+            ]
+        )
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=600.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request(
+            "invoke",
+            {"action_id": "configure_fpga", "input": {"ccf_path": str(path), "attempts": 2}},
+        )
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "ok", result
+        outcome = result["data"]["result"]
+        assert outcome["done"] is True
+        assert outcome["attempts"] == 2, "a DONE-less pass must fail and retry, not report ok"
+        host.assert_complete()
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+def test_configure_fpga_reports_uncertain_when_done_never_asserts(monkeypatch, tmp_path):
+    path, digest = _synthetic_ccf(tmp_path)
+    monkeypatch.setattr(proto, "CCF_SHA256", digest)
+    blob = path.read_bytes()
+    header = proto.parse_ccf_header(blob)
+    bitstream = proto.swap_first_pages(proto.extract_ccf_slot(blob, header, 0))
+
+    async def run():
+        host = _AdvancingPinsHost(_fpga_pass_script(bitstream, pins_done_byte=0x00))
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=600.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request(
+            "invoke",
+            {"action_id": "configure_fpga", "input": {"ccf_path": str(path), "attempts": 1}},
+        )
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "unknown", result
+        assert result["error"]["code"] == "TRANSPORT_ERROR"
+        assert result["error"]["dispatch_state"] == "unknown"
+        host.assert_complete()
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+def test_configure_fpga_fails_a_short_bitstream_send(monkeypatch, tmp_path):
+    """A chunk the host reports short is a failed pass, never a load that
+    presses on to the DONE poll as if the bitstream had been delivered."""
+    path, digest = _synthetic_ccf(tmp_path)
+    monkeypatch.setattr(proto, "CCF_SHA256", digest)
+    blob = path.read_bytes()
+    header = proto.parse_ccf_header(blob)
+    bitstream = proto.swap_first_pages(proto.extract_ccf_slot(blob, header, 0))
+    chunk_count = (len(bitstream) + proto.BITSTREAM_CHUNK_MAX - 1) // proto.BITSTREAM_CHUNK_MAX
+    assert chunk_count == 2
+
+    async def run():
+        # Chunk 2 reports 5000 of 10000 bytes sent: the pass fails at the
+        # chunk, resets the interface mode, and never polls DONE.
+        host = _AdvancingPinsHost(
+            _fpga_pass_script(
+                bitstream, pins_done_byte=0x10, chunk_sends=[None, 5000], stop_after_chunks=True
+            )
+        )
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=600.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request(
+            "invoke",
+            {"action_id": "configure_fpga", "input": {"ccf_path": str(path), "attempts": 1}},
+        )
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "unknown", result
+        assert result["error"]["code"] == "TRANSPORT_ERROR"
+        assert result["error"]["dispatch_state"] == "unknown"
+        host.assert_complete()
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+def test_read_samples_waits_for_capture_complete():
+    """read_samples must gate on status bit 0 before touching the planes.
+
+    Reading a running capture tears one dataset across two buffer
+    generations and stamps it complete.
+    """
+
+    async def run():
+        # One hundred not-complete status answers: the bounded poll loop
+        # exhausts its attempts and must refuse with TIMEOUT (uncertain:
+        # frames were already exchanged).
+        script = []
+        for _ in range(100):
+            script += _register_read(proto.frame_c2(0x0000, 4), b"\x00\x00\x00\x00")
+        host = MockHost(script)
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=10.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request("invoke", {"action_id": "read_samples", "input": {"column_count": 8}})
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "unknown", result
+        assert result["error"]["code"] == "TIMEOUT"
+        assert result["error"]["dispatch_state"] == "unknown"
         host.assert_complete()
         await plugin.close(context)
     asyncio.run(run())

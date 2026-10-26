@@ -2,17 +2,30 @@
   "profile_id": "intronix.logicport/1.0.0",
   "title": "Intronix LogicPort adapter actions",
   "description": "Plugin-authored action profile for the LogicPort adapter. The actions are adapter-bound operations over the reverse-engineered protocol; they are not an OTDP device-class contract. Operations whose protocol destinations are open items refuse loudly with UNSUPPORTED rather than guessing a register.",
-  "otdp_version": "0.2.2",
+  "otdp_version": "0.2.4",
   "actions": {
     "configure_fpga": {
       "description": "Load the FPGA bitstream from a LogicPort.ccf file through the FTDI bit-bang sequence (LogicPort-Protocol.md section 5; hardware-proven slot 0). The .ccf path comes from the action input or the LOGICPORT_CCF environment variable; the SHA-256 must be the hardware-proven digest.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "ccf_path": { "type": "string" },
-          "slot": { "type": "integer", "minimum": 0, "maximum": 7 },
-          "attempts": { "type": "integer", "minimum": 1, "maximum": 20 },
-          "init_timeout_ms": { "type": "integer", "minimum": 1 }
+          "ccf_path": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "init_timeout_ms": {
+            "type": "integer",
+            "minimum": 1
+          }
         },
         "additionalProperties": false
       },
@@ -24,10 +37,21 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "mask_a": { "type": "integer", "minimum": 0, "maximum": 17179869183 },
-          "mask_b": { "type": "integer", "minimum": 0, "maximum": 17179869183 }
+          "mask_a": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 17179869183
+          },
+          "mask_b": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 17179869183
+          }
         },
-        "required": ["mask_a", "mask_b"],
+        "required": [
+          "mask_a",
+          "mask_b"
+        ],
         "additionalProperties": false
       },
       "output_summary": "mask_a, mask_b, frames_sent",
@@ -48,7 +72,11 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "attempts": { "type": "integer", "minimum": 1, "maximum": 20 }
+          "attempts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
         },
         "additionalProperties": false
       },
@@ -60,15 +88,38 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "column_count": { "type": "integer", "minimum": 1, "maximum": 2047 },
-          "prescale": { "type": "integer", "minimum": 0 },
-          "trigger_word": { "type": "integer", "minimum": 0, "maximum": 2047 }
+          "column_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2047
+          },
+          "prescale": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "trigger_word": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2047
+          }
         },
-        "required": ["column_count"],
+        "required": [
+          "column_count"
+        ],
         "additionalProperties": false
       },
       "output_summary": "column_count, page_base, trigger_position, columns, runs, total_samples, trigger_column (when trigger_word given)",
       "side_effect": "none"
+    },
+    "read_counter": {
+      "description": "The frequency-counter read as a typed action: one locked sweep of all four counter channels (the device's own round-robin unit), the same poll-floored select/gate/count sequences as the read frequency_a..d parameters, in the shape the execution contract sanctions for a state-changing read (a core read verb declaring state_change is excluded from procedures; a bench admits this action through its per-device allow rule). Selecting channels is a device state change, so the action declares side_effect state_change.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_summary": "frequencies_hz (a, b, c, d), unit, quality, source",
+      "side_effect": "state_change"
     }
   }
 }

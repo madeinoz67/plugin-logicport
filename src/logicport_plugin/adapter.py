@@ -15,6 +15,7 @@ digest.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import os
@@ -24,6 +25,16 @@ from . import protocol as proto
 
 def create_plugin():
     return Plugin()
+
+
+async def _pace_wait(seconds: float) -> None:
+    """Wait ``seconds`` between counter gate polls.
+
+    The default is a real wait on the event loop; tests inject a fake that
+    advances the mock clock, so the poll floor is rehearsed deterministically
+    (the record's confirmed floor: counter polls wait longer than 75 ms).
+    """
+    await asyncio.sleep(seconds)
 
 
 #: The adapter's supported verbs (descriptor ``capabilities``).
@@ -43,6 +54,7 @@ _INVOKE_ACTIONS = frozenset(
         "stop",
         "resync",
         "read_samples",
+        "read_counter",
         "otdp.logic_analyser.configure/1.0.0",
         "otdp.logic_analyser.arm/1.0.0",
         "otdp.logic_analyser.fetch/1.0.0",
@@ -56,13 +68,26 @@ _INVOKE_ACTIONS = frozenset(
 _STATUS_POLL_MAX_ATTEMPTS = 100
 
 #: Receive bound for the quiet-tolerant write ACK drain (§3.1): the app
-#: drains pending response bytes after each write and checks an ACK whose
-#: exact length the decode did not pin.
+#: The write ACK is exactly three bytes on the observed grammar
+#: (C1, 00, command counter — record section 10, 2026-10-26); the drain
+#: below stays quiet-tolerant because the adapter does not yet parse that
+#: grammar (wire-truth work, parked): the mock rehearses a quiet line and
+#: the recorded exchange lengths stay the static decode's.
 _ACK_DRAIN_MAX_BYTES = 8
 
-#: C2 register reads answer with four bytes in the hardware probe (§8); the
-#: status byte is the first, the trigger position word the first two
-#: (big-endian).
+#: C2 register reads request four bytes; the static decode takes the
+#: status byte as the first reply byte and the trigger position word as
+#: the first two (big-endian). The reply GRAMMAR is observed (record
+#: section 10: the reply runs the requested count plus four bytes of
+#: overhead — the C2 echo, a zero byte, the command counter — before the
+#: data); this n-byte receive is the static-decode framing, which that
+#: observed grammar contradicts. Until the adapter consumes the observed
+#: grammar its read path cannot complete against observed hardware: the
+#: n-byte receive takes the reply's C2 echo as its first data byte, so a
+#: gate poll never reads ready and a status poll never reads complete,
+#: and each exchange leaves the reply's four overhead bytes unread.
+#: Adopting the observed grammar is gated on a register-data probe (the
+#: parked wire-truth work).
 _REGISTER_READ_BYTES = 4
 
 _FPGA_POLL_TIMEOUT_MS_DEFAULT = 1000
@@ -76,6 +101,10 @@ class Plugin:
         self._rate_word = None  # last packed C1/C2 rate word (C3 carries it)
         self._configurations = {}  # configuration_id -> class configure input
         self._acquisitions = {}  # acquisition_id -> configuration_id
+        # The counter is a multiplexer: one select/gate/count sequence must
+        # never interleave with another, or the wrong channel's count comes
+        # back tagged ``quality: "valid"``.
+        self._counter_lock = asyncio.Lock()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -261,8 +290,14 @@ class Plugin:
     async def _read_status(self, context):
         """C2 read of register 0x100000; the status byte is response byte 0.
 
-        The hardware probe requested N=4 and received four bytes (§8); the
-        status-byte map is §5c.
+        The status-byte map is the static decode of record section 5c —
+        NOT hardware-decoded: the 2026-10-12 four-byte read that seemed to
+        confirm it is withdrawn (its tool truncates; record section 10),
+        and every address the read-only probes tried answered zero data.
+        The receive framing here is the static decode's n-byte form; the
+        observed reply grammar (count plus four overhead bytes) does not
+        match it, and this read path cannot complete against observed
+        hardware until the adapter consumes the observed grammar.
         """
         word = proto.wire_address(proto.REG_STATUS)
         await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
@@ -363,6 +398,8 @@ class Plugin:
             return await self._action_resync(context, operation_id, verb, inputs)
         if action_id == "read_samples":
             return await self._action_read_samples(context, operation_id, verb, inputs)
+        if action_id == "read_counter":
+            return await self._action_read_counter(context, operation_id, verb, inputs)
         if action_id == "otdp.logic_analyser.configure/1.0.0":
             return await self._class_configure(context, operation_id, verb, inputs)
         if action_id == "otdp.logic_analyser.arm/1.0.0":
@@ -568,29 +605,55 @@ class Plugin:
             uncertain=True,
         )
 
+    async def _send_stream(self, data, context) -> bool:
+        """One stream send; False when the host reports fewer bytes sent.
+
+        A host that reports no ``sent`` count is taken at its word (the
+        reply carries no accounting); a reported short send is a failed
+        transfer — the bitstream the device saw is not the bitstream we
+        hold, and the pass must not press on to the DONE poll.
+        """
+        reply = await self.services.transfer(proto.stream_send(data), context)
+        sent = reply.get("sent") if isinstance(reply, dict) else None
+        return sent is None or sent >= len(data)
+
     async def _fpga_pass(self, context, bitstream, poll_ms):
-        """One section 5 pass; returns the outcome dict, or None on failure."""
+        """One section 5 pass; returns the outcome dict, or None on failure.
+
+        DONE must assert for the pass to count (§5 step 10): the C loader
+        retries the whole sequence when it does not, and so does the
+        caller's attempt loop. A short bitstream send fails the pass the
+        same way.
+        """
         await self.services.transfer(proto.ftdi_purge("rx"), context)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
         await self.services.transfer(
             proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), context
         )
-        await self.services.transfer(proto.stream_send(bytes([proto.FPGA_PULSE_START])), context)
+        if not await self._send_stream(bytes([proto.FPGA_PULSE_START]), context):
+            await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+            return None
         # DONE must clear after the reset pulse (§5 step 5); the C loader
         # treats a miss as a retry gate, not a hard stop.
         await self._poll_pins(context, proto.FPGA_DONE_PIN, want_set=False, timeout_ms=poll_ms)
-        await self.services.transfer(proto.stream_send(bytes([proto.FPGA_BITSTREAM_START])), context)
+        if not await self._send_stream(bytes([proto.FPGA_BITSTREAM_START]), context):
+            await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+            return None
         init_asserted = await self._poll_pins(context, proto.FPGA_INIT_PIN, want_set=True, timeout_ms=poll_ms)
         if not init_asserted:
             return None
         offset = 0
         while offset < len(bitstream):
             chunk = bitstream[offset : offset + proto.BITSTREAM_CHUNK_MAX]
-            await self.services.transfer(proto.stream_send(chunk), context)
+            if not await self._send_stream(chunk, context):
+                await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+                return None
             offset += len(chunk)
         done = await self._poll_pins(context, proto.FPGA_DONE_PIN, want_set=True, timeout_ms=poll_ms)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
-        return {"init_asserted": True, "done": done}
+        if not done:
+            return None
+        return {"init_asserted": True, "done": True}
 
     async def _poll_pins(self, context, mask, want_set, timeout_ms):
         """Poll the pin byte until ``mask`` is set or clear within the budget."""
@@ -638,6 +701,24 @@ class Plugin:
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
+        # Capture-complete gate (record §5c): the planes are drained only
+        # when status bit 0 is set. Reading a running capture tears one
+        # dataset across two buffer generations and would stamp it complete.
+        status_frame = proto.frame_c2(proto.wire_address(proto.REG_STATUS), _REGISTER_READ_BYTES)
+        complete = False
+        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
+            await self._send_frame(status_frame, context)
+            data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
+            bits = proto.decode_status(proto.parse_read_byte(data))
+            if bits.capture_complete:
+                complete = True
+                break
+            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
+                break
+        if not complete:
+            # Frames were already exchanged: an uncertain outcome, never a
+            # clean failure.
+            raise TimeoutError("capture did not complete before the sample read")
         # Trigger position word (register 0x10000A) for the page base (§6.1).
         word = proto.wire_address(proto.REG_TRIGGER_POSITION)
         await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
@@ -675,6 +756,45 @@ class Plugin:
             "verb": verb,
             "status": "ok",
             "data": result,
+        }
+
+    async def _action_read_counter(self, context, operation_id, verb, inputs):
+        """The counter read as a typed invoke action — the procedure path.
+
+        The execution contract excludes state-changing core reads from
+        procedures; this action carries the same poll-floored
+        select/gate/count sequences as the ``read frequency_*`` parameters
+        in the typed shape a bench's allow rule admits. It is a single
+        locked sweep of all four channels — the device's own round-robin
+        unit (the vectors rehearse exactly this cycle) — so one admitted
+        procedure step returns every counter. Interactive hosts keep the
+        read parameters; procedures use this action.
+        """
+        if inputs != {}:
+            return self._failure_inject(
+                operation_id, verb, "INVALID_ARGUMENT", "read_counter takes no input"
+            )
+        remaining = self._deadline_check(context)
+        remaining()
+        await context.mark_dispatch_started()
+        async with self._counter_lock:
+            frequencies = {
+                name: await self._read_counter_channel(context, slot)
+                for name, slot in _FREQUENCY_SLOTS.items()
+            }
+        return {
+            "operation_id": operation_id,
+            "verb": verb,
+            "status": "ok",
+            "data": {
+                "action_id": "read_counter",
+                "result": {
+                    "frequencies_hz": frequencies,
+                    "unit": "Hz",
+                    "quality": "valid",
+                    "source": "device",
+                },
+            },
         }
 
     async def _resync_flush(self, context) -> bool:
@@ -728,9 +848,11 @@ class Plugin:
     async def _drain_ack(self, context):
         """Drain the post-write ACK bytes (§3.1); quiet is acceptable.
 
-        The ACK's exact length the decode did not pin, so the drain is
-        quiet-tolerant and the bytes are recorded as evidence rather than
-        parsed.
+        The observed ACK is exactly three bytes (C1, 00, command counter —
+        record section 10, 2026-10-26); this drain stays quiet-tolerant
+        and records the byte count as evidence rather than parsing it,
+        because the adapter does not yet parse the observed reply grammar
+        (wire-truth work, parked) and the mock rehearses a quiet line.
         """
         data = await self._receive(context, _ACK_DRAIN_MAX_BYTES, exact_bytes=None)
         if data:
@@ -757,21 +879,51 @@ class Plugin:
     async def _read_frequency(self, context, channel):
         """The multiplexed counter: select, wait ready, read the count.
 
-        Selecting the channel is a C1 write (a device state change the
-        verb-wide read policy cannot declare — disclosed in the descriptor
-        parameter descriptions and the standards-gap report), the ready
-        gate reads 0 when the count is settled, and Hz = count x 10.
+        Selecting the channel is a C1 write — declared per parameter
+        through ``read_policy.side_effect: state_change`` (which escalates
+        the read verb, OTDP S20), and exposed to procedures as the typed
+        ``read_counter`` action an allow rule can admit (the execution
+        contract excludes state-changing core reads from procedures). The
+        ready gate reads 0 when the count is settled, and Hz = count x 10.
+
+        The whole select/gate/count sequence holds the counter lock, and a
+        not-ready gate re-polls only after ``FREQ_POLL_INTERVAL_MIN_MS``
+        (the record's confirmed floor: counter polls wait longer than
+        75 ms; the adapter floor is 100 ms).
         """
         if not 0 <= channel < proto.FREQ_CHANNELS:
             raise ValueError("counter channel must be 0..3")
+        async with self._counter_lock:
+            hz = await self._read_counter_channel(context, channel)
+        return {
+            "parameter": f"frequency_{chr(ord('a') + channel)}",
+            "value": hz,
+            "unit": "Hz",
+            "observed_at": self.services.utc_now(),
+            "age_ms": 0,
+            "quality": "valid",
+            "source": "device",
+        }
+
+    async def _read_counter_channel(self, context, channel):
+        """One channel's select/gate/count sequence — the caller holds the
+        counter lock (the ``read_counter`` action holds it across its
+        whole four-channel sweep)."""
         await self._send_frame(
             proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
             context,
         )
         await self._drain_ack(context)
         gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
+        floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
+        last_poll: float | None = None
         for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
+            if last_poll is not None:
+                remaining = floor_s - (self.services.monotonic() - last_poll)
+                if remaining > 0:
+                    await _pace_wait(remaining)
             await self._send_frame(gate_frame, context)
+            last_poll = self.services.monotonic()
             gate = proto.parse_read_byte(
                 await self._receive(context, 1, exact_bytes=1)
             )
@@ -785,15 +937,7 @@ class Plugin:
             proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4), context
         )
         count = proto.parse_read_dword(await self._receive(context, 4, exact_bytes=4))
-        return {
-            "parameter": f"frequency_{chr(ord('a') + channel)}",
-            "value": proto.frequency_hz(count),
-            "unit": "Hz",
-            "observed_at": self.services.utc_now(),
-            "age_ms": 0,
-            "quality": "valid",
-            "source": "device",
-        }
+        return proto.frequency_hz(count)
 
     async def _action_set_trigger_position(self, context, operation_id, verb, inputs):
         """The two LE16 trigger-position writes with the offset branches."""

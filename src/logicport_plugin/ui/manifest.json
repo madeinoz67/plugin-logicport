@@ -1,7 +1,7 @@
 {
   "contract_version": "0.4.0",
   "plugin_id": "intronix.logicport",
-  "descriptor_sha256": "b8d368129cd62982c94cb5c52de1cee29459683548c908a1d0cd9ae6a03a66ec",
+  "descriptor_sha256": "15d2b71e48bc586ba2abdeede36842b262f97fc349b91ba67c6e14d00ec21600",
   "bindings": [
     {
       "id": "capture",
@@ -313,7 +313,7 @@
   ],
   "extensions": {
     "plugin-ui-class-reference:layout": {
-      "contract_version": "0.4.0",
+      "contract_version": "0.5.0",
       "pages": [
         {
           "page_id": "capture",
@@ -420,6 +420,10 @@
                 },
                 {
                   "binding_id": "configure_fpga",
+                  "kind": "button"
+                },
+                {
+                  "binding_id": "read_counter",
                   "kind": "button"
                 },
                 {

@@ -336,7 +336,7 @@ Constraints from the decode:
 - FPGA configuration: the bit-bang sequence plus `LogicPort.ccf` (section 5). The plugin must carry this 8.4 MB file, or read it from an installed LogicPort directory.
 - The file `36875214.ccf` gates the Windows application mode, not the device. A plugin does not need it. Ship it unchanged only if the Windows app runs beside the plugin.
 
-### Frequency Counter (confirmed)
+### Frequency Counter (static decode confirmed; not hardware probed)
 
 The upper register page is the hardware frequency counter. It is multiplexed across four channels:
 
@@ -408,6 +408,21 @@ Tool: `tools/fpga_loader.c`, slot 0 of `LogicPort.ccf`. Result chain:
 - Bitstream streamed: 1,057,840 bytes in 10000-byte chunks.
 - FPGA DONE asserted. Configuration complete.
 
-Follow-up C2 probe on the configured device returned 4 bytes `E0 E0 E0 E0`. Decode: bit 0 = 0 (armed and running), bits 6 and 5 = 11 (pre-fill phase). This matches the status-byte map in section 5c.
+Follow-up C2 probe on the configured device returned 4 bytes `E0 E0 E0 E0`. Decode: bit 0 = 0 (armed and running), bits 6 and 5 = 11 (pre-fill phase). This matches the status-byte map in section 5c. [WITHDRAWN 2026-10-26: the probe tool reads at most 4 bytes, so this is a truncated prefix of a longer reply frame, not a status byte — see section 10. The decode claim does not stand.]
 
-The full decode chain — installer extraction, command layer, sample format, FPGA load, and status registers — is now proven end to end on hardware.
+Hardware-proven to this point: the installer extraction (header checksum and slot table), the FPGA load chain (page swap, INIT/DONE handshake, bitstream delivery, DONE asserted), the C2 read framing (a configured device replies; a bare device does not — section 10 proves the ordering twice), and the reply grammar of section 10. NOT proven on hardware: the status byte and its bit map (the section 9 decode is withdrawn above), the sample-plane reads and the section 6 decode (no sample byte has been read on a device — static decode plus offline mock rehearsal with constructed fixtures only), the frequency-counter registers (static decode only), the register map and its address decomposition (every probed address returned zero data — section 10), and the C1 configuration writes' payload semantics. An earlier revision of this section claimed the full decode chain was proven end to end on hardware; that claim overran the evidence above.
+
+## 10. Read-only reply-grammar probes (2026-10-26)
+
+Probes: `tools/addr_probe.c` (reads) and `tools/write_probe.c` (writes), both read-only at the register layer — no register writes were made. All observations below are from the live device; every interpretation is marked HYPOTHESIS, not finding.
+
+- Init-order dependency, proven twice: a bare device (no FPGA configuration) answers a C2 read with zero bytes within 1.5 s (three runs, deterministic). After the section 9 FPGA load, a reply arrives in about 4 ms. The FPGA must be configured before the device answers.
+- Read-reply grammar: the reply length is the requested count plus 4. The frame is `C2`, `00`, a counter byte, then count+1 zero bytes. The requested count is honoured.
+- The reply shape is identical for wire addresses `0x0000`, `0x0001`, `0x0002`, `0x0004`, `0x0010`, `0x0100`, `0x1000` and `0x8000`. The register data read zeros for every address.
+- Counter continuity: a concurrent session's log shows one continuous counter across writes and reads (0x35 to 0x3B over seven writes, 0x3C to 0x4E over seventeen reads, then 0x4F and 0x50 in this session's runs). HYPOTHESIS: the counter is a device-side command counter shared by reads and writes; a gap in it detects a lost or duplicated frame. An earlier note read `0F` then `4F` and concluded no counter ran; that note is withdrawn — another session was driving the device between the two reads.
+- Write ACK grammar: exactly three bytes, `C1`, `00`, the counter byte. The ACK-shape open item is closed at the grammar level; the ACK payload semantics stay open.
+- Write latency: about 119 ms per write. HYPOTHESIS: poll loops must pace at this cadence; not established as a requirement.
+- Seventeen candidate addresses were read after the writes. No register value appeared, in either byte order.
+- Tool defect: `tools/live_probe.c` caps its read at 4 bytes, so it can never show a full reply; its decode output is not evidence. The tool lives outside this repository; correcting it (or stating the cap in its output) is owner action.
+
+Consequences. The status/register layer is not hardware-decoded, and no status-byte decode may be claimed anywhere. The low-16 address decomposition is not merely unproven — a read-only probe at this layer cannot discriminate it, because the responder returns the same zero-data shape regardless of address; the decomposition is consistent with the observed ACK framing and untested against register data. The discriminating experiment is a register write followed by a read-back; register writes are a separate, owner-watched step that has not been taken. Page bits, the ping-pong page stride, and the register map remain open.
