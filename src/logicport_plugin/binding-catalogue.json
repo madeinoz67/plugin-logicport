@@ -1,6 +1,6 @@
 {
   "contract_version": "0.4.0",
-  "descriptor_sha256": "b8d368129cd62982c94cb5c52de1cee29459683548c908a1d0cd9ae6a03a66ec",
+  "descriptor_sha256": "73d535e76e54baf75ba747b8b9edb0ec0912d20961c5dcb19d2fe9e867581e49",
   "targets": [
     {
       "id": "capture",

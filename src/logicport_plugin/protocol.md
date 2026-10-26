@@ -76,7 +76,7 @@ run the resync flush. The adapter locates the `.ccf` from the action input
 `ccf_path` or the `LOGICPORT_CCF` environment variable, verifies the
 SHA-256, and refuses any other bitstream. The file is never bundled.
 
-## Sample data (record section 6)
+## Sample data (record section 6; static decode plus mock rehearsal only)
 
 Two ping-pong capture pages; each page holds five planes (D0-7, D8-15,
 D16-23, D24-31, flags). Even output column `2j` comes from page A byte
@@ -85,12 +85,16 @@ stored 0 means the channel is HIGH. The flags plane carries CLK1/CLK2
 (bits 1/2 on even columns, 5/6 on odd, inverted) and marks run columns
 with bit 3. A run column carries one 35-bit big-endian-ish count across
 the four data planes plus the flag's low three bits; it repeats the
-previous column state for `count` sample periods. The adapter reads the
-trigger-position word, computes the page base `(tp + 1 + prescale) mod
-0x400`, reads ten plane chunks of `(N+1)/2` bytes, de-interleaves, and
-runs the decode loop.
+previous column state for `count` sample periods. The adapter gates on
+the status byte's capture-complete bit, reads the trigger-position word,
+computes the page base `(tp + 1 + prescale) mod 0x400`, reads ten plane
+chunks of `(N+1)/2` bytes, de-interleaves, and runs the decode loop.
+No sample byte has been read on hardware: the format is static-decode
+confirmed and rehearsed on the offline mock with constructed fixtures
+only (the hardware probes closed at the FPGA load and one status read;
+see the record's live validation log and loader result).
 
-## Frequency counter (record: confirmed 2026-10-12)
+## Frequency counter (record section 7: static decode confirmed; not hardware probed)
 
 The upper page is a four-channel multiplexed counter: `0x40000000` reads
 the ready gate (0 = count ready) and writes the channel select (0-3);
@@ -98,9 +102,13 @@ the ready gate (0 = count ready) and writes the channel select (0-3);
 the running maximum (fallback for channel 0). The host cycles the four
 channels with a one-iteration lag (select N+1, read N) at intervals
 longer than 75 ms (adapter floor: 100 ms). The `read frequency_a..d`
-operations select, wait ready, and read; the mux write is a device side
-effect the verb-wide read policy cannot declare (disclosed in the
-parameter descriptions; standards gap).
+operations hold a counter lock for the whole select/gate/count sequence
+(an interleaved pair would return the wrong channel's count tagged
+valid), re-poll a not-ready gate only after the 100 ms floor, and read;
+the mux write is a device side effect the verb-wide read policy cannot
+declare (disclosed in the parameter descriptions; standards gap). The
+counter registers were never probed on hardware — the decode comes from
+the static analysis of `LogicPort.exe`.
 
 ## Reader bounds, trigger position, sequencer (record: confirmed)
 
@@ -130,6 +138,22 @@ admission, never published by the adapter. Per the coordinator's ruling,
 the class configure refuses loudly while its destinations are open; the
 standalone threshold write is served by `write threshold_v`.
 
+The `otdp.dmm/1.0.0` profile and its `measure`/`configure` actions are
+NOT declared (issue #562 ruling, 2026-10-26). The class configure is a
+preset control — function, range, aperture, autozero — and the counter
+has no decoded destinations for any of them: implementing it would echo
+an `effective_configuration` the device never received, the same
+unevidenced-write lie the 2026-10-12 coordinator ruling refuses for the
+logic-analyser class configure. Because the class contract requires both
+actions and couples `measure` to a `configuration_id` only `configure`
+can mint, declaring the profile while refusing either action left a
+declared surface the adapter refuses — dead wire the host could schedule
+against. The honest direction is de-advertisement: the four counter
+channels stay declared (all four — the adapter serves slots 0-3) and are
+served by the `read frequency_a..d` parameters, which are adapter-bound,
+tested against the mock, and disclose the mux-write side effect the
+verb-wide read policy cannot.
+
 ## Open items (loud refusals, not guesses)
 
 - Trigger-mask destination registers (record section 5a: two `usbWrite40`
@@ -157,8 +181,12 @@ the matching operation with `UNSUPPORTED` while the slot is unset.
 ## Rehearsal evidence
 
 `vectors.json` scripts the wire conversation the offline mock can rehearse
-(`send_receive`, hex): two status reads (the first response `E0 E0 E0 E0`
-is the 2026-10-12 device capture), the trigger-position read, ten
-plane reads for an 8-column capture (constructed decode fixtures
-including one run column), and a stop. The FTDI control dialect is not
-rehearseable on the mock — it needs a real transport.
+(`send_receive`, hex): two full poll cycles, each the status read (the
+first response `E0 E0 E0 E0` is the 2026-10-12 device capture), the
+trigger-position read, and the four counter channels' select/gate/count
+exchanges (counts `000186a0`, `000030d4`, `00000000`, `000f4240` —
+constructed fixture values, not hardware reads). The sample-plane
+conversation is rehearsed by the adapter tests over the mock (the
+8-column constructed decode with one run column), not by `vectors.json`;
+the FTDI control dialect is not rehearseable on the mock at all — it
+needs a real transport.

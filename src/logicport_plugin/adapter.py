@@ -15,6 +15,7 @@ digest.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import os
@@ -24,6 +25,16 @@ from . import protocol as proto
 
 def create_plugin():
     return Plugin()
+
+
+async def _pace_wait(seconds: float) -> None:
+    """Wait ``seconds`` between counter gate polls.
+
+    The default is a real wait on the event loop; tests inject a fake that
+    advances the mock clock, so the poll floor is rehearsed deterministically
+    (the record's confirmed floor: counter polls wait longer than 75 ms).
+    """
+    await asyncio.sleep(seconds)
 
 
 #: The adapter's supported verbs (descriptor ``capabilities``).
@@ -76,6 +87,10 @@ class Plugin:
         self._rate_word = None  # last packed C1/C2 rate word (C3 carries it)
         self._configurations = {}  # configuration_id -> class configure input
         self._acquisitions = {}  # acquisition_id -> configuration_id
+        # The counter is a multiplexer: one select/gate/count sequence must
+        # never interleave with another, or the wrong channel's count comes
+        # back tagged ``quality: "valid"``.
+        self._counter_lock = asyncio.Lock()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -568,29 +583,55 @@ class Plugin:
             uncertain=True,
         )
 
+    async def _send_stream(self, data, context) -> bool:
+        """One stream send; False when the host reports fewer bytes sent.
+
+        A host that reports no ``sent`` count is taken at its word (the
+        reply carries no accounting); a reported short send is a failed
+        transfer — the bitstream the device saw is not the bitstream we
+        hold, and the pass must not press on to the DONE poll.
+        """
+        reply = await self.services.transfer(proto.stream_send(data), context)
+        sent = reply.get("sent") if isinstance(reply, dict) else None
+        return sent is None or sent >= len(data)
+
     async def _fpga_pass(self, context, bitstream, poll_ms):
-        """One section 5 pass; returns the outcome dict, or None on failure."""
+        """One section 5 pass; returns the outcome dict, or None on failure.
+
+        DONE must assert for the pass to count (§5 step 10): the C loader
+        retries the whole sequence when it does not, and so does the
+        caller's attempt loop. A short bitstream send fails the pass the
+        same way.
+        """
         await self.services.transfer(proto.ftdi_purge("rx"), context)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
         await self.services.transfer(
             proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), context
         )
-        await self.services.transfer(proto.stream_send(bytes([proto.FPGA_PULSE_START])), context)
+        if not await self._send_stream(bytes([proto.FPGA_PULSE_START]), context):
+            await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+            return None
         # DONE must clear after the reset pulse (§5 step 5); the C loader
         # treats a miss as a retry gate, not a hard stop.
         await self._poll_pins(context, proto.FPGA_DONE_PIN, want_set=False, timeout_ms=poll_ms)
-        await self.services.transfer(proto.stream_send(bytes([proto.FPGA_BITSTREAM_START])), context)
+        if not await self._send_stream(bytes([proto.FPGA_BITSTREAM_START]), context):
+            await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+            return None
         init_asserted = await self._poll_pins(context, proto.FPGA_INIT_PIN, want_set=True, timeout_ms=poll_ms)
         if not init_asserted:
             return None
         offset = 0
         while offset < len(bitstream):
             chunk = bitstream[offset : offset + proto.BITSTREAM_CHUNK_MAX]
-            await self.services.transfer(proto.stream_send(chunk), context)
+            if not await self._send_stream(chunk, context):
+                await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+                return None
             offset += len(chunk)
         done = await self._poll_pins(context, proto.FPGA_DONE_PIN, want_set=True, timeout_ms=poll_ms)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
-        return {"init_asserted": True, "done": done}
+        if not done:
+            return None
+        return {"init_asserted": True, "done": True}
 
     async def _poll_pins(self, context, mask, want_set, timeout_ms):
         """Poll the pin byte until ``mask`` is set or clear within the budget."""
@@ -638,6 +679,24 @@ class Plugin:
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
+        # Capture-complete gate (record §5c): the planes are drained only
+        # when status bit 0 is set. Reading a running capture tears one
+        # dataset across two buffer generations and would stamp it complete.
+        status_frame = proto.frame_c2(proto.wire_address(proto.REG_STATUS), _REGISTER_READ_BYTES)
+        complete = False
+        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
+            await self._send_frame(status_frame, context)
+            data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
+            bits = proto.decode_status(proto.parse_read_byte(data))
+            if bits.capture_complete:
+                complete = True
+                break
+            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
+                break
+        if not complete:
+            # Frames were already exchanged: an uncertain outcome, never a
+            # clean failure.
+            raise TimeoutError("capture did not complete before the sample read")
         # Trigger position word (register 0x10000A) for the page base (§6.1).
         word = proto.wire_address(proto.REG_TRIGGER_POSITION)
         await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
@@ -761,39 +820,52 @@ class Plugin:
         verb-wide read policy cannot declare — disclosed in the descriptor
         parameter descriptions and the standards-gap report), the ready
         gate reads 0 when the count is settled, and Hz = count x 10.
+
+        The whole select/gate/count sequence holds the counter lock, and a
+        not-ready gate re-polls only after ``FREQ_POLL_INTERVAL_MIN_MS``
+        (the record's confirmed floor: counter polls wait longer than
+        75 ms; the adapter floor is 100 ms).
         """
         if not 0 <= channel < proto.FREQ_CHANNELS:
             raise ValueError("counter channel must be 0..3")
-        await self._send_frame(
-            proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
-            context,
-        )
-        await self._drain_ack(context)
-        gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
-        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
-            await self._send_frame(gate_frame, context)
-            gate = proto.parse_read_byte(
-                await self._receive(context, 1, exact_bytes=1)
+        async with self._counter_lock:
+            await self._send_frame(
+                proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
+                context,
             )
-            if proto.freq_ready(gate):
-                break
-            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
-                raise TimeoutError("Cancelled or expired")
-        else:
-            raise TimeoutError("frequency counter never became ready")
-        await self._send_frame(
-            proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4), context
-        )
-        count = proto.parse_read_dword(await self._receive(context, 4, exact_bytes=4))
-        return {
-            "parameter": f"frequency_{chr(ord('a') + channel)}",
-            "value": proto.frequency_hz(count),
-            "unit": "Hz",
-            "observed_at": self.services.utc_now(),
-            "age_ms": 0,
-            "quality": "valid",
-            "source": "device",
-        }
+            await self._drain_ack(context)
+            gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
+            floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
+            last_poll: float | None = None
+            for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
+                if last_poll is not None:
+                    remaining = floor_s - (self.services.monotonic() - last_poll)
+                    if remaining > 0:
+                        await _pace_wait(remaining)
+                await self._send_frame(gate_frame, context)
+                last_poll = self.services.monotonic()
+                gate = proto.parse_read_byte(
+                    await self._receive(context, 1, exact_bytes=1)
+                )
+                if proto.freq_ready(gate):
+                    break
+                if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
+                    raise TimeoutError("Cancelled or expired")
+            else:
+                raise TimeoutError("frequency counter never became ready")
+            await self._send_frame(
+                proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4), context
+            )
+            count = proto.parse_read_dword(await self._receive(context, 4, exact_bytes=4))
+            return {
+                "parameter": f"frequency_{chr(ord('a') + channel)}",
+                "value": proto.frequency_hz(count),
+                "unit": "Hz",
+                "observed_at": self.services.utc_now(),
+                "age_ms": 0,
+                "quality": "valid",
+                "source": "device",
+            }
 
     async def _action_set_trigger_position(self, context, operation_id, verb, inputs):
         """The two LE16 trigger-position writes with the offset branches."""

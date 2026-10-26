@@ -336,7 +336,7 @@ Constraints from the decode:
 - FPGA configuration: the bit-bang sequence plus `LogicPort.ccf` (section 5). The plugin must carry this 8.4 MB file, or read it from an installed LogicPort directory.
 - The file `36875214.ccf` gates the Windows application mode, not the device. A plugin does not need it. Ship it unchanged only if the Windows app runs beside the plugin.
 
-### Frequency Counter (confirmed)
+### Frequency Counter (static decode confirmed; not hardware probed)
 
 The upper register page is the hardware frequency counter. It is multiplexed across four channels:
 
@@ -410,4 +410,4 @@ Tool: `tools/fpga_loader.c`, slot 0 of `LogicPort.ccf`. Result chain:
 
 Follow-up C2 probe on the configured device returned 4 bytes `E0 E0 E0 E0`. Decode: bit 0 = 0 (armed and running), bits 6 and 5 = 11 (pre-fill phase). This matches the status-byte map in section 5c.
 
-The full decode chain — installer extraction, command layer, sample format, FPGA load, and status registers — is now proven end to end on hardware.
+Hardware-proven to this point: the installer extraction (header checksum and slot table), the FPGA load chain (page swap, INIT/DONE handshake, bitstream delivery, DONE asserted), the C2 read framing, and one status-register read on a configured device. NOT proven on hardware: the sample-plane reads and the section 6 decode (no sample byte has been read on a device — the format is static-decode confirmed and rehearsed on the offline mock with constructed fixtures only), the frequency-counter registers (static decode only), and the C1 configuration writes. An earlier revision of this section claimed the full decode chain was proven end to end on hardware; that claim overran the evidence above.
