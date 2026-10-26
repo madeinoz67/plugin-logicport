@@ -73,4 +73,16 @@ scripts/sdk_reentry.sh
 
 ## Run log
 
-- (record each run here: date, SDK version, branch, step results)
+- 2026-10-26, SDK 0.22.0, branch `fix/562-machine-truth` (first run): all
+  four steps green, exit 0. Pin 0.22.0 matched; migrate ran the copier
+  update to template v0.22.0 (byte-identical no-op at the same version —
+  clean tree after); derive re-pinned the descriptor digest
+  `73d535e7…`; gates read tests=83 failures=0 errors=0 skipped=1 from
+  the junit XML, the skip being the end-to-end rehearsal with its
+  no-hardware-capture reason. Two earlier runs of this same checkpoint
+  failed correctly and are part of the record: the migrate step refused
+  an untracked `uv.lock` (the upgrade gate counts untracked files — the
+  lock is now committed), and the migrate step surfaced
+  `scaffold_extra_absent` (the documented test environment could not run
+  the documented upgrade command — the test extra now carries
+  `benchweave-sdk[scaffold]`).
