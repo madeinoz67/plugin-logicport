@@ -26,17 +26,74 @@ Every command is a 5-byte header plus payload, then a response wait.
   command (low 16 bits rate, `Int(value/65536)` clock select). The payload
   is `L+1` bytes: `usbWriteByte` (1), `usbWriteWord` (2 LE),
   `usbWriteDword` (4 LE), `usbWrite40` (5 LE, carries 34-bit trigger
-  masks and dwell values). After each write the device answers with an
-  ACK of exactly three bytes — `C1`, `00`, a command counter shared with
-  read replies (record section 10, observed 2026-10-26; one write answers
-  in about 119 ms). The ACK payload semantics stay open.
-- `C2 w0 w1 n0 n1` — read request; the device answers with the requested
-  count plus a four-byte header (`C2`, `00`, the counter byte, then the
-  data — record section 10). Response VALUES are big-endian
-  (`usbReadWord`, `usbReadDword` — static decode; every probed address
-  read zeros, so no value decode is hardware-confirmed).
+  masks and dwell values). After each write the host drains the ACK bytes
+  — a quiet line is acceptable; the ACK's exact length is an open item.
+  (Both ACK sentences are superseded by the reply-grammar addendum
+  below — dated 2026-10-26, issue #562: the ACK is exactly 3 bytes, no
+  quiet-line drain.)
+- `C2 w0 w1 n0 n1` — read request; the device answers with `n` bytes.
+  Response VALUES are big-endian (`usbReadWord`, `usbReadDword`).
+  (The answer length is superseded by the same addendum: the reply is
+  `n + 4` bytes, header plus payload.)
 - `C3 w0 w1 00 00` — stop; the rate bytes carry the cached rate. The host
   sends it before a rate change and after capture errors.
+
+### Reply grammar (dated addendum, 2026-10-26, issue #562)
+
+The 2026-10-26 hardware probes (`tools/addr_probe.c`,
+`tools/write_probe.c`, issue #562) proved the response grammar. The
+sentences above that it contradicts stay frozen and are superseded by
+this block; the adapter implements this block:
+
+- A C2 read reply is `count + 4` bytes: `C2 00 <counter> <aux>` plus
+  the `count` payload bytes, values big-endian. Replies were observed
+  at ~3.5 ms.
+- A C1 write ACK is exactly 3 bytes: `C1 00 <counter>` — observed
+  seven-for-seven at ~119 ms (the write to `0x0008` acked `C1 00 37`).
+  The quiet-line drain is retired; the adapter receives and parses the
+  exact frame (`parse_write_ack`).
+- One command counter sequences reads and writes, +1 per exchange
+  (observed continuous `0x35`→`0x4E` across both directions). A gap is
+  recorded as evidence and refuses the exchange. The counter is one byte,
+  so continuity is modular: `0xFF`→`0x00` continues, it does not gap
+  (fold R1, 2026-10-26). The adapter's continuity is
+  first-frame-sets-baseline: gaps before the first observed frame are
+  invisible to it (fold R14) — a fresh session cannot judge any exchange
+  that happened before it connected.
+- The aux header byte's meaning is unproven: parsed, recorded as
+  evidence, never interpreted. The `AUX_SEMANTICS` slot in `protocol.py`
+  holds the register-slot `None` until a probe observes meaning (fold
+  R10).
+- The C3 stop frame's reply shape is UNPROVEN — the 2026-10-26 probe
+  never sent C3, so the probes observed no C3 reply at all (fold R3,
+  2026-10-26; open item recorded). After a C3 frame the adapter does not
+  parse a reply: it performs a bounded quiet-tolerant drain (at most 8
+  bytes, no exact byte count, budget = the transport's own receive
+  timeout) and records only `logicport.c3_drain` byte-count evidence.
+  The drain never advances the adapter's counter view — if the device
+  does ACK C3 frames with a counter advance, the next parsed reply will
+  register a counter gap. That gap evidence is how the true C3 reply
+  shape will surface on hardware: honest by design, disclosed here and
+  in the drain's code comment.
+- The probe also fixed the init-order dependency: a bare device
+  (unconfigured FPGA) answers a C2 read with zero bytes (three runs,
+  deterministic); after the FPGA load a reply arrives in about 4 ms.
+  A concurrent session's log shows the counter running across reads and
+  writes (`0x35`–`0x3B` over seven writes, then `0x3C`–`0x4E` over
+  seventeen reads). Poll loops pacing at the observed write latency
+  remain a HYPOTHESIS, not a requirement.
+
+### Disclosed, not folded (2026-10-26 review wave, issue #562)
+
+Two review NITs were documented rather than fixed, with their reasons:
+
+- `parse_write_ack` fabricates `aux=0` for the 3-byte ACK (the
+  `ReplyFrame` requires the field). Harmless: ACKs carry no aux byte —
+  inventing a null is the honest placeholder.
+- The status read's receipt reports `value = <counter byte>` (fold R2's
+  ruling). The register returns no other byte, a counter is device state,
+  and the readings surface must render something true — so the receipt
+  carries the counter rather than an empty value.
 
 ## FTDI control dialect
 
@@ -51,24 +108,45 @@ section 8.1 stream kinds.
 
 | Address | Dir | Meaning |
 |---|---|---|
-| `0x100000` | read | status byte (bit 0 capture complete, bit 1 immediate trigger, bits 6:5 pre-fill phase) |
+| `0x100000` | read | status read — the bit decode previously listed here is retracted (see below) |
 | `0x10000A` | read | trigger position word |
 | `0x02000000` page | read | sample memory: `+0x101` D0-7, `+0x2000` D8-15, `+0x3000` D16-23, `+0x4000` D24-31, `+0x9000` flags |
 
-The frame carries a 16-bit address field. NO wire mapping is
-hardware-proven: the read-only probes of record section 10 (2026-10-26)
-returned the same zero-data reply shape for every address tried, so the
-low-16 decomposition is consistent with the observed ACK framing and
-untested against register data — a read-only probe at this layer cannot
-discriminate it, and the discriminating experiment (a register write,
-then a read-back) has not been run. The status-byte row above is the
-static decode of record section 5c; the 2026-10-12 four-byte read that
-seemed to confirm it is withdrawn (truncated by its tool, record section
-10). Sample-plane addresses share one page whose offsets fit the field;
-the adapter encodes them low-16 on that same unproven decomposition.
-Three documented addresses (`0x1000000`, `0x2000000`, `0x40000000`)
-collide on low-16 with other pages — their wire encoding is not decoded
-and the adapter refuses them.
+### Status retraction (dated addendum, 2026-10-26, issue #562)
+
+The status-bit decode this table previously carried for `0x100000` —
+bit 0 capture complete, bit 1 immediate trigger, bits 6:5 pre-fill
+phase — is RETRACTED, not silently edited away. The 2026-10-26 hardware
+probes (`tools/write_probe.c`, issue #562) proved the reply grammar: a
+C2 read answers `count + 4` bytes, `C2 00 <counter> <aux>` plus the
+payload, and the byte read where a "status byte" was expected advances
+with every command — it is the command counter. No capture-complete,
+immediate-trigger or pre-fill semantics are proven; the adapter treats
+the capture gate as ungated (`complete: None`) until a proven gate
+source lands, and a fetch dataset now carries
+`context.completion_proven: false` so the dataset itself admits it
+(fold R6, 2026-10-26: the gate hook's source is `None`; the field rides
+the dataset's free-form context block because the OTDP dataset schema
+closes its top-level keys). The aux header byte is recorded as evidence;
+its meaning is unproven. The full dated addendum with the probe outputs
+lands in the parent-dir record — `docs/LogicPort-Protocol.md` §5c in the
+logiport workspace one directory above this plugin project (issue #562,
+task 10).
+
+The frame carries a 16-bit address field. The one hardware-proven wire
+mapping is status `0x100000` → word `0x0000`. Sample-plane addresses
+share one page whose offsets fit the field; the adapter encodes them
+low-16. Three documented addresses (`0x1000000`, `0x2000000`,
+`0x40000000`) collide on low-16 with other pages. Corrected 2026-10-26
+(issue #562): `wire_address` MASKS the low 16 bits — every documented
+address encodes and transmits as its low word (`0x40000000` → `0x0000`);
+the adapter does not refuse the colliding addresses. The collision is
+real: mode-based disambiguation is unproven and the page-bits part of
+the decomposition remains the open item `wire_address` is the one place
+to fix when a live probe pins it. The 2026-10-26 read-only probes could
+not discriminate the decomposition (identical zero-data replies at every
+probed address); the discriminating experiment is a register write
+followed by a read-back, an owner-watched step that has not been taken.
 
 ## FPGA configuration (record section 5; hardware-proven slot 0, 2026-10-12)
 
@@ -99,8 +177,9 @@ stored 0 means the channel is HIGH. The flags plane carries CLK1/CLK2
 (bits 1/2 on even columns, 5/6 on odd, inverted) and marks run columns
 with bit 3. A run column carries one 35-bit big-endian-ish count across
 the four data planes plus the flag's low three bits; it repeats the
-previous column state for `count` sample periods. The adapter gates on
-the status byte's capture-complete bit, reads the trigger-position word,
+previous column state for `count` sample periods. The adapter records
+the capture-gate hook (source `None` — the status-bit gate is retracted,
+see the status addendum) and then reads the trigger-position word,
 computes the page base `(tp + 1 + prescale) mod 0x400`, reads ten plane
 chunks of `(N+1)/2` bytes, de-interleaves, and runs the decode loop.
 No sample byte has been read on hardware: the format is static-decode
@@ -204,51 +283,44 @@ mock, with the mux-write side effect declared through
   discriminating experiment is a register write followed by a read-back,
   an owner-watched step that has not been taken.
 
-## Hardware observations (read-only probes, 2026-10-26; record section 10)
-
-All read-only at the register layer — no register writes were made.
-Observations: a bare device (unconfigured FPGA) answers a C2 read with
-zero bytes (three runs, deterministic); after the FPGA load a reply
-arrives in about 4 ms — the init-order dependency is proven twice. Read
-replies run the requested count plus a four-byte header (`C2`, `00`, a
-counter byte, then the data bytes), with the same zero-data shape at
-every probed wire address. Write ACKs are exactly three bytes (`C1`,
-`00`, the counter byte); one write answers in about 119 ms. The counter
-runs continuously across reads and writes (a concurrent session's log
-shows 0x35–0x3B over seven writes, then 0x3C–0x4E over seventeen reads).
-Interpretations, each a HYPOTHESIS and not a finding: the counter is a
-device-side command counter whose gaps detect lost or duplicated frames;
-poll loops should pace at the observed write latency. Consequences for
-this package: the ACK-length open item is closed at the grammar level;
-the status byte and the register map are NOT hardware-decoded; the
-low-16 address decomposition is untested against register data; and the
-adapter's C2 exchanges still receive `n` raw bytes as register data per
-the static decode. The reply grammar is OBSERVED and the adapter's
-n-byte receive is the static-decode framing the observed grammar
-contradicts — until the adapter consumes the observed grammar, its read
-path cannot complete against observed hardware (the n-byte receive
-takes the reply's C2 echo as its first data byte, so a gate poll never
-reads ready and a status poll never reads complete, and each exchange
-leaves the reply's four overhead bytes unread). Adopting the observed
-count-plus-header grammar is future work gated on a register-data probe
-(the parked wire-truth issue), not a change made here.
-
 Each open item is a named constant in `protocol.py`
-(`REGISTER_THRESHOLD_DAC`, `REGISTER_TRIGGER_MASK_A/B`,
-`RATE_COMMAND_PAYLOAD`) or a documented formula gap; the adapter refuses
-the matching operation with `UNSUPPORTED` while the slot is unset.
+(`REGISTER_TRIGGER_MASK_A/B`, `RATE_COMMAND_PAYLOAD`) or a documented
+formula gap; the adapter refuses the matching operation with
+`UNSUPPORTED` while the slot is unset. (Corrected 2026-10-26, issue
+#562: `REGISTER_THRESHOLD_DAC` is no longer an open item — the decode
+lane closed it at `0x100008` by static analysis and `write threshold_v`
+is served. That destination has never been verified on hardware: no
+probe has observed a threshold write land, so the address stays
+provisional until a live probe confirms it.)
 
 ## Rehearsal evidence
 
-`vectors.json` scripts the wire conversation the offline mock can rehearse
-(`send_receive`, hex): two full poll cycles, each the status read, the
-trigger-position read, and the four counter channels' select/gate/count
-exchanges. Every response — including the status rows' `E0 E0 E0 E0` —
-is a constructed fixture value, not a hardware capture: the 2026-10-12
-four-byte status read was withdrawn as evidence (its tool truncates at
-four bytes, record section 10), and the vectors predate the observed
-count-plus-header reply grammar, which the mock does not model. The
-sample-plane conversation is rehearsed by the adapter tests over the
-mock (the 8-column constructed decode with one run column), not by
-`vectors.json`; the FTDI control dialect is not rehearseable on the mock
-at all — it needs a real transport.
+(The exchange list this section previously described — two status reads
+with an `E0 E0 E0 E0` first response, the trigger-position read, ten
+plane reads for an 8-column capture, and a stop — described the
+pre-#562 builder-generated corpus. The vectors were rebuilt
+2026-10-26; that list is superseded by the addendum below. The ten
+plane reads and the stop never existed in the hardware-derived corpus,
+and the first response it cited was the truncated four-byte read the
+parent record retracts.)
+
+### Rehearsal coverage (dated addendum, 2026-10-26, issue #562; corpus rebuild same day)
+
+`vectors.json` scripts THREE full poll cycles of 14 rows each
+(`send_receive`, hex), in the descriptor's read-only walk order (fold
+R5): a status poll, then the four-channel frequency-counter cycle —
+select write with its 3-byte ACK, ready-gate read, count dword read —
+for channels a through d, then a trigger-position read. Three cycles
+mirror the probe's own observed counter window (the third runs
+`0x35`→`0x42`, inside the recorded `0x35`→`0x4E` run) so a three-cycle
+replay never self-wedges. The corpus contains no sample-plane reads and
+no stop. Reply bytes follow the proven reply grammar (headered reads,
+3-byte ACKs, one command counter `0x19`→`0x42` across the whole file);
+row 1 carries the hand-recorded 2026-10-26 `addr_probe` reply
+`C2 00 19 00 00 00 00 00` verbatim, and `tests/test_vectors.py` pins a
+sha256 over the serialized exchanges array so regeneration is a
+deliberate reviewed edit (fold R9). The trigger-position and
+frequency-count payload values are the rehearsal scenario's
+steady-signal fixtures, not probe recordings; the frames around them
+are the hardware shapes. The FTDI control dialect is not rehearseable
+on the mock — it needs a real transport.

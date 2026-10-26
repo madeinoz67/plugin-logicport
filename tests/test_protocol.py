@@ -71,18 +71,6 @@ def test_response_parsers_big_endian():
         proto.parse_read_dword(b"\x01\x02")
 
 
-def test_decode_status_hardware_capture():
-    # The §9 follow-up probe: E0 E0 E0 E0 — armed/running, prefill 11.
-    bits = proto.decode_status(0xE0)
-    assert bits.capture_complete is False
-    assert bits.prefill_phase == 0b11
-    assert bits.raw == 0xE0
-    complete = proto.decode_status(0x01)
-    assert complete.capture_complete is True
-    immediate = proto.decode_status(0x03)
-    assert immediate.immediate_trigger is True
-
-
 def test_threshold_dac_check_points():
     # The record's check points: +6 V -> 893, 0 V -> 473, -6 V -> 53.
     assert proto.threshold_dac_code(6.0) == 893
@@ -302,6 +290,33 @@ def test_open_slots_state():
     assert proto.RATE_COMMAND_PAYLOAD is None
 
 
+def test_aux_semantics_slot_open():
+    """Fold R10: the aux header byte's meaning is unproven (#562) — a
+    register-slot pin of None, so pinning it later is one assignment and
+    nothing interprets the byte today."""
+    assert proto.AUX_SEMANTICS is None
+
+
+def test_evidence_kind_taxonomy():
+    """Fold R16: every evidence kind the adapter records is a named
+    constant, and EVIDENCE_KINDS is exactly their union — a typo at a
+    record_evidence call site is a NameError, not a silent new kind."""
+    assert proto.EVIDENCE_KINDS == frozenset(
+        {
+            proto.EVIDENCE_STATUS_AUX,
+            proto.EVIDENCE_WRITE_ACK,
+            proto.EVIDENCE_COUNTER_GAP,
+            proto.EVIDENCE_COUNTER_REBASELINED,
+            proto.EVIDENCE_CAPTURE_GATE,
+            proto.EVIDENCE_C3_DRAIN,
+            proto.EVIDENCE_CONFIGURE_PENDING_WRITES,
+            proto.EVIDENCE_FETCH_DATASET,
+        }
+    )
+    for kind in proto.EVIDENCE_KINDS:
+        assert kind.startswith("logicport.")
+
+
 # --- Fold-in round 2 (RED first): frequency counter, bounds, trigger
 # position writes, sequencer (protocol-spec.md, confirmed 2026-10-12). ---
 
@@ -331,76 +346,6 @@ def test_frequency_counter_period_convention():
 def test_frequency_poll_interval_floor():
     # Round-robin polling waits longer than 75 ms between cycles.
     assert proto.FREQ_POLL_INTERVAL_MIN_MS > 75
-
-
-def test_hardware_observed_reply_grammar():
-    """The reply grammar the 2026-10-26 read-only probes showed (record
-    section 10).
-
-    These pin observed wire shape only — the requested count plus a
-    four-byte read header, and a three-byte write ACK. No register value,
-    page bit or status bit is pinned anywhere: every probed address
-    returned zero data, and the status byte is not hardware-decoded.
-    """
-    assert proto.READ_REPLY_HEADER_BYTES == 4
-    assert proto.WRITE_ACK_BYTES == 3
-    # About 119 ms observed per write; the hypothesis that poll loops
-    # must pace at this cadence is recorded in the record, not asserted.
-    assert proto.WRITE_ACK_LATENCY_MS == 119
-
-
-def test_read_reply_length_rule():
-    # The reply runs the requested count plus four bytes.
-    for count in (1, 4, 8, 0x7FF):
-        assert proto.read_reply_length(count) == count + proto.READ_REPLY_HEADER_BYTES
-
-
-def test_parse_read_reply_shape():
-    # The observed frame: C2, 00, counter, then count+1 data bytes
-    # (zeros on every probe) — the data region mirrors the C1 L+1
-    # convention. Total length is the requested count plus four.
-    frame = bytes([0xC2, 0x00, 0x35]) + b"\x00" * 5
-    counter, data = proto.parse_read_reply(frame, 4)
-    assert counter == 0x35
-    assert data == b"\x00" * 5
-    # The data bytes are returned verbatim; nothing decodes them.
-    frame = bytes([0xC2, 0x00, 0x36]) + b"\x01\x02\x03\x04"
-    counter, data = proto.parse_read_reply(frame, 3)
-    assert counter == 0x36
-    assert data == b"\x01\x02\x03\x04"
-    with pytest.raises(ValueError):
-        proto.parse_read_reply(bytes([0xC1, 0x00, 0x37]) + b"\x00" * 5, 4)  # wrong echo
-    with pytest.raises(ValueError):
-        proto.parse_read_reply(bytes([0xC2, 0x01, 0x37]) + b"\x00" * 5, 4)  # byte 1 not 00
-    with pytest.raises(ValueError):
-        proto.parse_read_reply(bytes([0xC2, 0x00, 0x37]) + b"\x00" * 4, 4)  # short
-    with pytest.raises(ValueError):
-        proto.parse_read_reply(bytes([0xC2, 0x00, 0x37]) + b"\x00" * 6, 4)  # long
-
-
-def test_parse_write_ack_shape():
-    # Exactly three bytes: C1, 00, the command counter.
-    assert proto.parse_write_ack(bytes([0xC1, 0x00, 0x3C])) == 0x3C
-    with pytest.raises(ValueError):
-        proto.parse_write_ack(bytes([0xC1, 0x00, 0x3C, 0x00]))  # too long
-    with pytest.raises(ValueError):
-        proto.parse_write_ack(bytes([0xC2, 0x00, 0x3C]))  # wrong echo
-    with pytest.raises(ValueError):
-        proto.parse_write_ack(bytes([0xC1, 0x01, 0x3C]))  # byte 1 not 00
-    with pytest.raises(ValueError):
-        proto.parse_write_ack(b"")  # empty
-
-
-def test_command_counter_continuity():
-    """One counter covers reads and writes (record section 10): a
-    contiguous step is ok, a skipped value means a lost frame, a repeat
-    means a duplicate. The wrap behaviour is unknown — only 0x35..0x50
-    was ever observed — so wrap is reported as a gap, not decoded."""
-    assert proto.counter_step(0x35, 0x36) == "ok"
-    assert proto.counter_step(0x4E, 0x4F) == "ok"
-    assert proto.counter_step(0x3B, 0x3D) == "gap"  # one command lost
-    assert proto.counter_step(0x3C, 0x3C) == "repeat"  # duplicate frame
-    assert proto.counter_step(0xFF, 0x00) == "gap"  # wrap unknown: reported, not decoded
 
 
 def test_frequency_round_robin_lag_plan():
@@ -568,3 +513,131 @@ def test_wire_address_families_low16():
     assert proto.wire_address(0x100006) == 0x0006
     assert proto.wire_address(0x200012) == 0x0012
     assert proto.wire_address(0x600012) == 0x0012
+
+
+# --- Fold-in round 3 (RED first): the reply grammar (hardware-proven
+# 2026-10-26 wire truth, issue #562 / tools/write_probe.c). ---
+
+from logicport_plugin.protocol import (
+    ReplyFrame, parse_reply, parse_write_ack, CMD_READ, CMD_WRITE,
+)
+import pytest
+
+def test_parse_reply_real_probe_bytes():
+    # Hand-recorded from the 2026-10-26 addr_probe run (count=4 @ 0x0000):
+    # count+4 = 8 bytes: header C2 00 19 00 + four zero payload bytes.
+    frame = bytes.fromhex("C200190000000000")
+    r = parse_reply(frame)
+    assert r == ReplyFrame(cmd_echo=0xC2, counter=0x19, aux=0x00,
+                           payload=bytes(4))
+
+
+def test_parse_reply_exposes_payload_be_value():
+    r = parse_reply(bytes.fromhex("C2001A00" "0000000A"))
+    assert int.from_bytes(r.payload, "big") == 10
+
+
+def test_parse_reply_wrong_cmd_refuses():
+    with pytest.raises(ValueError, match="command echo"):
+        parse_reply(bytes.fromhex("C3001900000000"), expected_cmd=CMD_READ)
+
+
+def test_parse_reply_second_byte_must_be_zero():
+    with pytest.raises(ValueError, match="second byte"):
+        parse_reply(bytes.fromhex("C2011900000000"))
+
+
+def test_parse_reply_short_refuses():
+    with pytest.raises(ValueError, match="at least 4"):
+        parse_reply(bytes.fromhex("C20019"))
+
+
+def test_parse_write_ack_real_probe_bytes():
+    # Hand-recorded from write_probe: write to 0x0008 acked "C1 00 37".
+    r = parse_write_ack(bytes.fromhex("C10037"))
+    assert r == ReplyFrame(cmd_echo=CMD_WRITE, counter=0x37, aux=0, payload=b"")
+
+
+def test_parse_write_ack_wrong_length_refuses():
+    with pytest.raises(ValueError, match="exactly 3"):
+        parse_write_ack(bytes.fromhex("C100"))
+    with pytest.raises(ValueError, match="exactly 3"):
+        parse_write_ack(bytes.fromhex("C1003700"))
+
+
+# --- Sibling wire-truth round (main #562), ported into the superset -------
+
+
+def test_hardware_observed_reply_grammar():
+    """The reply grammar the 2026-10-26 read-only probes showed (record
+    section 10).
+
+    These pin observed wire shape only — the requested count plus a
+    four-byte read header, and a three-byte write ACK. No register value,
+    page bit or status bit is pinned anywhere: every probed address
+    returned zero data, and the status byte is not hardware-decoded.
+    """
+    assert proto.READ_REPLY_HEADER_BYTES == 4
+    assert proto.WRITE_ACK_BYTES == 3
+    # About 119 ms observed per write; the hypothesis that poll loops
+    # must pace at this cadence is recorded in the record, not asserted.
+    assert proto.WRITE_ACK_LATENCY_MS == 119
+
+
+def test_read_reply_length_rule():
+    # The reply runs the requested count plus four bytes.
+    for count in (1, 4, 8, 0x7FF):
+        assert proto.read_reply_length(count) == count + proto.READ_REPLY_HEADER_BYTES
+
+
+def test_parse_read_reply_shape():
+    # The observed frame: C2, 00, counter, then count+1 data bytes
+    # (zeros on every probe) — the data region mirrors the C1 L+1
+    # convention. Total length is the requested count plus four. (The
+    # adapter consumes parse_reply's aux-header split; this record-shape
+    # splitter is kept as landed and both agree on the total length.)
+    frame = bytes([0xC2, 0x00, 0x35]) + b"\x00" * 5
+    counter, data = proto.parse_read_reply(frame, 4)
+    assert counter == 0x35
+    assert data == b"\x00" * 5
+    # The data bytes are returned verbatim; nothing decodes them.
+    frame = bytes([0xC2, 0x00, 0x36]) + b"\x01\x02\x03\x04"
+    counter, data = proto.parse_read_reply(frame, 3)
+    assert counter == 0x36
+    assert data == b"\x01\x02\x03\x04"
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC1, 0x00, 0x37]) + b"\x00" * 5, 4)  # wrong echo
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC2, 0x01, 0x37]) + b"\x00" * 5, 4)  # byte 1 not 00
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC2, 0x00, 0x37]) + b"\x00" * 4, 4)  # short
+    with pytest.raises(ValueError):
+        proto.parse_read_reply(bytes([0xC2, 0x00, 0x37]) + b"\x00" * 6, 4)  # long
+
+
+def test_parse_write_ack_shape():
+    # Exactly three bytes: C1, 00, the command counter. The superset
+    # parser returns the ReplyFrame; the counter rides .counter (the
+    # sibling's int-returning form, adapted at its call site).
+    assert proto.parse_write_ack(bytes([0xC1, 0x00, 0x3C])).counter == 0x3C
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(bytes([0xC1, 0x00, 0x3C, 0x00]))  # too long
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(bytes([0xC2, 0x00, 0x3C]))  # wrong echo
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(bytes([0xC1, 0x01, 0x3C]))  # byte 1 not 00
+    with pytest.raises(ValueError):
+        proto.parse_write_ack(b"")  # empty
+
+
+def test_command_counter_continuity():
+    """One counter covers reads and writes (record section 10): a
+    contiguous step is ok, a skipped value means a lost frame, a repeat
+    means a duplicate. The counter is one byte, so continuity is modular
+    (fold R1): 0xFF to 0x00 continues and does not gap — the same rule
+    the adapter's counter view enforces."""
+    assert proto.counter_step(0x35, 0x36) == "ok"
+    assert proto.counter_step(0x4E, 0x4F) == "ok"
+    assert proto.counter_step(0x3B, 0x3D) == "gap"  # one command lost
+    assert proto.counter_step(0x3C, 0x3C) == "repeat"  # duplicate frame
+    assert proto.counter_step(0xFF, 0x00) == "ok"  # modular wrap (fold R1)
