@@ -426,3 +426,31 @@ Probes: `tools/addr_probe.c` (reads) and `tools/write_probe.c` (writes), both re
 - Tool defect: `tools/live_probe.c` caps its read at 4 bytes, so it can never show a full reply; its decode output is not evidence. The tool lives outside this repository; correcting it (or stating the cap in its output) is owner action.
 
 Consequences. The status/register layer is not hardware-decoded, and no status-byte decode may be claimed anywhere. The low-16 address decomposition is not merely unproven — a read-only probe at this layer cannot discriminate it, because the responder returns the same zero-data shape regardless of address; the decomposition is consistent with the observed ACK framing and untested against register data. The discriminating experiment is a register write followed by a read-back; register writes are a separate, owner-watched step that has not been taken. Page bits, the ping-pong page stride, and the register map remain open.
+
+## 11. Retraction — the section 5c status-byte decode (dated addendum, 2026-10-26, issue #562)
+
+The status-bit decode this document carries is RETRACTED, not silently
+edited away. The affected frozen lines stand where they are; this block
+supersedes them:
+
+- the section 5c table (bit 0 capture complete, bit 1 immediate trigger,
+  bits 6:5 pre-trigger fill phase) and its poll-loop sentences,
+- the section 5b register row reading "Status byte (section 5c)",
+- the section 7 capture-poll constraint ("read the status byte ... until
+  bit 0 is 1"), and
+- the section 9 "Follow-up C2 probe" decode ("bit 0 = 0, bits 6 and 5 =
+  11") and the closing claim that status registers are proven end to end.
+
+The 2026-10-26 hardware probes (section 10; `tools/addr_probe.c`,
+`tools/write_probe.c`, issue #562) proved the reply grammar: a C2 read
+answers `count + 4` bytes, `C2 00 <counter> <aux>` plus the payload,
+values big-endian — and the byte read at register `0x100000` advances
+with every command. It is the command counter: one counter sequences
+reads and writes, +1 per exchange. The 2026-10-12 four-byte reply
+`E0 E0 E0 E0` was a truncated read of the old grammar, not a status
+byte; no capture-complete, immediate-trigger or pre-fill semantics are
+proven. The proven grammar, the adapter's counter-continuity rules
+(including the first-frame-sets-baseline limit) and the open C3 ACK
+question live in the plugin's `src/logicport_plugin/protocol.md`
+(reply-grammar, status-retraction and rehearsal addenda, 2026-10-26,
+#562) and in the parent-dir record `docs/LogicPort-Protocol.md` §5c.

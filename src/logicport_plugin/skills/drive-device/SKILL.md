@@ -23,7 +23,7 @@ Supported verbs and their shapes:
   dialect: device reset, timeouts 5000/5000, latency 4, baud 460800.
   Returns `{acknowledged: true}`.
 - `read` `{"parameter": "status"}` — C2 read of register 0x100000;
-  the value is the raw status byte (bit 0 capture complete).
+  the value is the command counter byte (the status-bit decode is retracted, dated 2026-10-26, issue #562: the recorded bits were the counter).
 - `read` `{"parameter": "trigger_position"}` — C2 read of register
   0x10000A; the trigger position word.
 - `write` `{"parameter": "rate_word", "value": <packed word>}` — the C1

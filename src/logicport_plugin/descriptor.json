@@ -3,7 +3,7 @@
     "descriptor_version": "0.1.0",
     "id": "intronix.logicport",
     "display_name": "Intronix LogicPort",
-    "description": "Intronix LogicPort 34-channel USB logic analyser (FTDI VID 0x0403 PID 0xDC48). Framing, FPGA load, status and sample-plane decode are implemented from the reverse-engineered protocol; configuration-write destination registers are open items and refuse loudly. Not hardware qualified.",
+    "description": "Intronix LogicPort 34-channel USB logic analyser (FTDI VID 0x0403 PID 0xDC48). Framing, FPGA load, and sample-plane decode are implemented from the reverse-engineered protocol; configuration-write destination registers are open items and refuse loudly. Not hardware qualified.",
     "identity": {
         "strategy": "adapter",
         "manufacturer": "Intronix",
@@ -128,7 +128,7 @@
         },
         {
             "name": "status",
-            "description": "Status byte of register 0x100000 (LogicPort-Protocol.md section 5c): bit 0 capture complete, bit 1 immediate trigger, bits 6:5 pre-trigger fill phase",
+            "description": "Status parameter of register 0x100000 (wire word 0x0000): the reply's command-counter byte — one counter sequences reads and writes (LogicPort-Protocol.md reply-grammar addendum, 2026-10-26, issue #562). The earlier bit decode is retracted; the aux header byte's meaning is unproven.",
             "type": "int",
             "access": "ro",
             "semantic": "state",
@@ -603,7 +603,7 @@
             {
                 "title": "LogicPort USB protocol reverse-engineering record",
                 "reference": "LogicPort-Protocol.md",
-                "revision": "2026-10-12"
+                "revision": "2026-10-26"
             },
             {
                 "title": "FPGA loader hardware result (DONE asserted, slot 0)",
@@ -615,7 +615,7 @@
             {
                 "id": "logicport-wire",
                 "path": "vectors.json",
-                "purpose": "Wire-protocol exchange rehearsal: status poll, trigger position, sample-plane reads and stop"
+                "purpose": "Wire-protocol exchange rehearsal: three poll cycles of status poll, trigger position, and the four-channel frequency counter (select, gate, count); no sample-plane reads, no stop"
             }
         ]
     },

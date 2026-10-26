@@ -1,147 +1,218 @@
 {
-  "evidence": "structural",
+  "evidence": "hardware-probes+scenario-fixtures",
   "transaction_dialect": "send_receive",
   "encoding": "hex",
+  "reply_grammar": "hardware-proven 2026-10-26 (#562): a read reply is count+4 bytes [C2 echo, 0x00, counter, aux] with a big-endian payload; a write ACK is exactly 3 bytes [C1, 0x00, counter]. One command counter sequences reads and writes, +1 per exchange across this whole capture (0x19-0x42, three full poll cycles). The aux header byte's meaning is unproven: it is recorded as evidence, never interpreted. Row order is the descriptor's read-only walk (status, frequency_a..d select/gate/count, trigger_position). Row 1 (status-poll) carries the hand-recorded addr_probe reply C200190000000000 verbatim (2026-10-26: count=4 at wire 0x0000 on an unarmed device \u2014 all register reads returned zeros). The trigger-position and frequency-count payload values are the rehearsal scenario's steady-signal fixtures, not probe recordings; the frames around them are the hardware shapes.",
   "exchanges": [
     {
-      "name": "status-running",
+      "name": "status-poll",
       "request": "c200000400",
-      "response": "e0e0e0e0"
-    },
-    {
-      "name": "trigger-position",
-      "request": "c20a000400",
-      "response": "0000e0e0"
+      "response": "C200190000000000"
     },
     {
       "name": "freq-a-select",
       "request": "c10000000000",
-      "response": ""
+      "response": "C1001A"
     },
     {
       "name": "freq-a-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C2001B0000"
     },
     {
       "name": "freq-a-count",
       "request": "c201000400",
-      "response": "000186a0"
+      "response": "C2001C00000186A0"
     },
     {
       "name": "freq-b-select",
       "request": "c10000000001",
-      "response": ""
+      "response": "C1001D"
     },
     {
       "name": "freq-b-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C2001E0000"
     },
     {
       "name": "freq-b-count",
       "request": "c201000400",
-      "response": "000030d4"
+      "response": "C2001F00000030D4"
     },
     {
       "name": "freq-c-select",
       "request": "c10000000002",
-      "response": ""
+      "response": "C10020"
     },
     {
       "name": "freq-c-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C200210000"
     },
     {
       "name": "freq-c-count",
       "request": "c201000400",
-      "response": "00000000"
+      "response": "C200220000000000"
     },
     {
       "name": "freq-d-select",
       "request": "c10000000003",
-      "response": ""
+      "response": "C10023"
     },
     {
       "name": "freq-d-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C200240000"
     },
     {
       "name": "freq-d-count",
       "request": "c201000400",
-      "response": "000f4240"
-    },
-    {
-      "name": "status-running",
-      "request": "c200000400",
-      "response": "e0e0e0e0"
+      "response": "C2002500000F4240"
     },
     {
       "name": "trigger-position",
       "request": "c20a000400",
-      "response": "0000e0e0"
+      "response": "C20026000000E0E0"
+    },
+    {
+      "name": "status-poll",
+      "request": "c200000400",
+      "response": "C200270000000000"
     },
     {
       "name": "freq-a-select",
       "request": "c10000000000",
-      "response": ""
+      "response": "C10028"
     },
     {
       "name": "freq-a-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C200290000"
     },
     {
       "name": "freq-a-count",
       "request": "c201000400",
-      "response": "000186a0"
+      "response": "C2002A00000186A0"
     },
     {
       "name": "freq-b-select",
       "request": "c10000000001",
-      "response": ""
+      "response": "C1002B"
     },
     {
       "name": "freq-b-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C2002C0000"
     },
     {
       "name": "freq-b-count",
       "request": "c201000400",
-      "response": "000030d4"
+      "response": "C2002D00000030D4"
     },
     {
       "name": "freq-c-select",
       "request": "c10000000002",
-      "response": ""
+      "response": "C1002E"
     },
     {
       "name": "freq-c-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C2002F0000"
     },
     {
       "name": "freq-c-count",
       "request": "c201000400",
-      "response": "00000000"
+      "response": "C200300000000000"
     },
     {
       "name": "freq-d-select",
       "request": "c10000000003",
-      "response": ""
+      "response": "C10031"
     },
     {
       "name": "freq-d-gate",
       "request": "c200000100",
-      "response": "00"
+      "response": "C200320000"
     },
     {
       "name": "freq-d-count",
       "request": "c201000400",
-      "response": "000f4240"
+      "response": "C2003300000F4240"
+    },
+    {
+      "name": "trigger-position",
+      "request": "c20a000400",
+      "response": "C20034000000E0E0"
+    },
+    {
+      "name": "status-poll",
+      "request": "c200000400",
+      "response": "C200350000000000"
+    },
+    {
+      "name": "freq-a-select",
+      "request": "c10000000000",
+      "response": "C10036"
+    },
+    {
+      "name": "freq-a-gate",
+      "request": "c200000100",
+      "response": "C200370000"
+    },
+    {
+      "name": "freq-a-count",
+      "request": "c201000400",
+      "response": "C2003800000186A0"
+    },
+    {
+      "name": "freq-b-select",
+      "request": "c10000000001",
+      "response": "C10039"
+    },
+    {
+      "name": "freq-b-gate",
+      "request": "c200000100",
+      "response": "C2003A0000"
+    },
+    {
+      "name": "freq-b-count",
+      "request": "c201000400",
+      "response": "C2003B00000030D4"
+    },
+    {
+      "name": "freq-c-select",
+      "request": "c10000000002",
+      "response": "C1003C"
+    },
+    {
+      "name": "freq-c-gate",
+      "request": "c200000100",
+      "response": "C2003D0000"
+    },
+    {
+      "name": "freq-c-count",
+      "request": "c201000400",
+      "response": "C2003E0000000000"
+    },
+    {
+      "name": "freq-d-select",
+      "request": "c10000000003",
+      "response": "C1003F"
+    },
+    {
+      "name": "freq-d-gate",
+      "request": "c200000100",
+      "response": "C200400000"
+    },
+    {
+      "name": "freq-d-count",
+      "request": "c201000400",
+      "response": "C2004100000F4240"
+    },
+    {
+      "name": "trigger-position",
+      "request": "c20a000400",
+      "response": "C20042000000E0E0"
     }
   ]
 }

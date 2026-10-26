@@ -81,7 +81,7 @@ RESYNC_ATTEMPTS_MAX = 20
 # 0x40000000 all reduce to 0x0000) — their wire encoding is NOT decoded,
 # and :func:`wire_address` refuses them rather than guessing a page-bank.
 
-REG_STATUS = 0x100000  # read: status byte (Protocol §5c)
+REG_STATUS = 0x100000  # read: status read — the §5c bit decode is retracted (2026-10-26, #562)
 REG_WIRE_STATUS = 0x100001  # read: 9 wire-status bytes
 REG_CAPTURE_COMPLETE_WRITE = 0x100002  # write at capture completion
 REG_CAPTURE_COMPLETE_WRITE_B = 0x100003
@@ -135,6 +135,39 @@ REGISTER_TRIGGER_MASK_B: int | None = None
 #: The 1-byte usbWriteByte payload of the C1 rate command (Protocol §5
 #: step 13 routes it through FUN_004ca679); its value is not decoded.
 RATE_COMMAND_PAYLOAD: int | None = None
+#: The reply header's aux byte meaning — UNPROVEN (#562): parsed,
+#: recorded as evidence, never interpreted. Register-slot pattern (fold
+#: R10): one assignment pins the decode once a probe observes meaning.
+AUX_SEMANTICS: int | None = None
+
+# --- Evidence taxonomy (fold R16, #562) ------------------------------------
+#
+# Every evidence kind the adapter's record_evidence call sites emit is
+# named here, once. The adapter's call sites reference these names, so a
+# typo at a call site is a NameError, not a silent new kind. EVIDENCE_KINDS
+# is exactly their union: the taxonomy's one definition.
+
+EVIDENCE_STATUS_AUX = "logicport.status_aux"
+EVIDENCE_WRITE_ACK = "logicport.write_ack"
+EVIDENCE_COUNTER_GAP = "logicport.counter_gap"
+EVIDENCE_COUNTER_REBASELINED = "logicport.counter_rebaselined"
+EVIDENCE_CAPTURE_GATE = "logicport.capture_gate"
+EVIDENCE_C3_DRAIN = "logicport.c3_drain"
+EVIDENCE_CONFIGURE_PENDING_WRITES = "logicport.configure.pending_writes"
+EVIDENCE_FETCH_DATASET = "logicport.fetch.dataset"
+
+EVIDENCE_KINDS = frozenset(
+    {
+        EVIDENCE_STATUS_AUX,
+        EVIDENCE_WRITE_ACK,
+        EVIDENCE_COUNTER_GAP,
+        EVIDENCE_COUNTER_REBASELINED,
+        EVIDENCE_CAPTURE_GATE,
+        EVIDENCE_C3_DRAIN,
+        EVIDENCE_CONFIGURE_PENDING_WRITES,
+        EVIDENCE_FETCH_DATASET,
+    }
+)
 
 
 # --- Frame builders (Protocol §3.1-§3.3) ----------------------------------
@@ -263,28 +296,16 @@ def parse_read_dword(data: bytes) -> int:
     return int.from_bytes(data[:4], "big")
 
 
-# --- Status byte (Protocol §5c) -------------------------------------------
-
-
-class StatusBits(NamedTuple):
-    """The decoded status byte of register 0x100000."""
-
-    capture_complete: bool  # bit 0: 1 = capture complete (ends the poll)
-    immediate_trigger: bool  # bit 1: when set, force trigger position 0
-    prefill_phase: int  # bits 6:5 as read (00, then 10, then 11)
-    raw: int
-
-
-def decode_status(byte: int) -> StatusBits:
-    """Decode the status byte per Protocol §5c."""
-    if not isinstance(byte, int) or isinstance(byte, bool) or not 0 <= byte <= 0xFF:
-        raise ValueError("status must be a byte")
-    return StatusBits(
-        capture_complete=bool(byte & 0x01),
-        immediate_trigger=bool(byte & 0x02),
-        prefill_phase=(byte >> 5) & 0x03,
-        raw=byte,
-    )
+# --- Status byte (Protocol §5c) — RETRACTED 2026-10-26 (#562) --------------
+#
+# The status-bit decode this section carried (bit 0 capture complete,
+# bit 1 immediate trigger, bits 6:5 pre-fill phase) is retracted: the
+# 2026-10-26 probes proved the byte read at that register advances with
+# every command — it is the command counter (see the reply grammar
+# below). No capture-complete, immediate-trigger or pre-fill semantics
+# are proven. The aux header byte is parsed and recorded; its meaning is
+# unproven. `Adapter._read_status` consumes the proven reply frame and
+# reports `complete: None` until a gate source is pinned.
 
 
 # --- Threshold DAC (Protocol §5a) ------------------------------------------
@@ -630,13 +651,26 @@ def trigger_column_compensated(column_count: int, trigger_word: int, pipeline: i
 # tools/write_probe.c writes; no register writes). This section records
 # OBSERVED WIRE SHAPE only: every probed address returned zero data, so no
 # register value, page bit or status bit is confirmed by it. The adapter
-# does not yet consume this grammar — its C2 exchanges still receive n
-# raw bytes per the static decode; adopting the observed shape is future
-# work gated on a register-data probe.
+# consumes this grammar (#562 wire truth): every C2 exchange parses the
+# count+4 reply through :func:`parse_reply`, every write ACK parses
+# through :func:`parse_write_ack`, and one command counter sequences both
+# directions (continuity enforced, wrap-aware).
+#
+# Read reply: count+4 bytes  [cmd_echo, 0x00, counter, aux] + count payload
+# bytes, values big-endian. Write ACK: exactly 3 bytes [CMD_WRITE, 0x00,
+# counter]. The aux byte's meaning is UNPROVEN — parse, record, never
+# interpret. Where the payload boundary sits inside the count+4 total is
+# the one open interpretation: :func:`parse_reply` treats byte 3 as the
+# aux header and the payload as the count bytes (the shape the adapter
+# consumes); :func:`parse_read_reply` treats byte 3 as the first of
+# count+1 data bytes (the record's L+1-mirror reading). Both agree on the
+# total length; every probed address answered zeros, so no register data
+# discriminates them — a register-data probe is the experiment that
+# closes it.
 
 #: A read reply runs the requested count plus four bytes: `C2`, `00`, the
-#: command counter, then count+1 data bytes (the data region mirrors the
-#: C1 payload's L+1 convention). Every probed address answered zeros.
+#: command counter, the aux byte, then the payload (see the boundary note
+#: above). Every probed address answered zeros.
 READ_REPLY_HEADER_BYTES = 4
 #: A write ACK is exactly three bytes: C1, a zero byte, the same command
 #: counter the read replies carry. The ACK-shape open item is closed at
@@ -655,11 +689,44 @@ def read_reply_length(count: int) -> int:
     return count + READ_REPLY_HEADER_BYTES
 
 
+class ReplyFrame(NamedTuple):
+    """One parsed reply through the hardware-proven grammar (#562)."""
+
+    cmd_echo: int
+    counter: int
+    aux: int
+    payload: bytes
+
+
+def parse_reply(data: bytes, expected_cmd: int = CMD_READ) -> ReplyFrame:
+    """Parse a read reply of the hardware-proven shape."""
+    if not isinstance(data, bytes) or len(data) < 4:
+        raise ValueError("reply needs at least 4 header bytes")
+    if data[0] != expected_cmd:
+        raise ValueError(f"command echo {data[0]:#04x} != {expected_cmd:#04x}")
+    if data[1] != 0:
+        raise ValueError(f"second byte {data[1]:#04x} is not 0x00")
+    return ReplyFrame(data[0], data[2], data[3], data[4:])
+
+
+def parse_write_ack(data: bytes) -> ReplyFrame:
+    """Parse the 3-byte write ACK [CMD_WRITE, 0x00, counter]."""
+    if not isinstance(data, bytes) or len(data) != WRITE_ACK_BYTES:
+        raise ValueError(f"write ACK is exactly {WRITE_ACK_BYTES} bytes")
+    if data[0] != CMD_WRITE:
+        raise ValueError(f"ACK echo {data[0]:#04x} != {CMD_WRITE:#04x}")
+    if data[1] != 0:
+        raise ValueError(f"ACK second byte {data[1]:#04x} is not 0x00")
+    return ReplyFrame(data[0], data[2], 0, b"")
+
+
 def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
     """Split an observed read reply into ``(counter, data)``.
 
     The frame is ``C2 00 <counter>`` then count+1 data bytes; the total
-    length is the requested count plus four. The data bytes come back
+    length is the requested count plus four (the payload-boundary
+    interpretation differs from :func:`parse_reply` — see the section
+    note; no register data discriminates them). The data bytes come back
     verbatim — nothing here decodes register values (every probed
     address answered zeros; the status/register layer is not
     hardware-decoded, record section 10).
@@ -678,38 +745,22 @@ def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
     return data[2], data[3:]
 
 
-def parse_write_ack(data: bytes) -> int:
-    """Validate an observed write ACK; returns the command counter.
-
-    The ACK is exactly three bytes: ``C1 00 <counter>``. The counter is
-    the same one the read replies carry.
-    """
-    if not isinstance(data, bytes):
-        raise ValueError("an ACK is bytes")
-    if len(data) != WRITE_ACK_BYTES:
-        raise ValueError(f"a write ACK is exactly {WRITE_ACK_BYTES} bytes, got {len(data)}")
-    if data[0] != CMD_WRITE:
-        raise ValueError("a write ACK echoes C1")
-    if data[1] != 0x00:
-        raise ValueError("write-ACK byte 1 is 00 on every observed frame")
-    return data[2]
-
-
 def counter_step(previous: int, current: int) -> str:
     """Classify one step of the shared command counter.
 
     HYPOTHESIS (record section 10): one counter covers reads and writes,
     so ``"ok"`` (a contiguous step) is the only healthy transition, a
     ``"gap"`` means a lost frame, and a ``"repeat"`` means a duplicated
-    one. The wrap behaviour is unknown — only 0x35 to 0x50 was ever
-    observed — so a wrap reports as a gap rather than being decoded.
+    one. The counter is one byte, so continuity is modular (fold R1):
+    ``0xFF`` to ``0x00`` continues and does not gap — the adapter's
+    :meth:`Adapter._advance_counter` enforces the same modular rule.
     """
     for name, value in (("previous", previous), ("current", current)):
         if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFF:
             raise ValueError(f"{name} must be a byte")
     if current == previous:
         return "repeat"
-    if current == previous + 1:
+    if current == ((previous + 1) & 0xFF):
         return "ok"
     return "gap"
 

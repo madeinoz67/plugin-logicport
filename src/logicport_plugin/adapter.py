@@ -67,30 +67,23 @@ _INVOKE_ACTIONS = frozenset(
 #: advances (the SDK mocks) must still terminate.
 _STATUS_POLL_MAX_ATTEMPTS = 100
 
-#: Receive bound for the quiet-tolerant write ACK drain (§3.1): the app
-#: The write ACK is exactly three bytes on the observed grammar
-#: (C1, 00, command counter — record section 10, 2026-10-26); the drain
-#: below stays quiet-tolerant because the adapter does not yet parse that
-#: grammar (wire-truth work, parked): the mock rehearses a quiet line and
-#: the recorded exchange lengths stay the static decode's.
-_ACK_DRAIN_MAX_BYTES = 8
-
-#: C2 register reads request four bytes; the static decode takes the
-#: status byte as the first reply byte and the trigger position word as
-#: the first two (big-endian). The reply GRAMMAR is observed (record
-#: section 10: the reply runs the requested count plus four bytes of
-#: overhead — the C2 echo, a zero byte, the command counter — before the
-#: data); this n-byte receive is the static-decode framing, which that
-#: observed grammar contradicts. Until the adapter consumes the observed
-#: grammar its read path cannot complete against observed hardware: the
-#: n-byte receive takes the reply's C2 echo as its first data byte, so a
-#: gate poll never reads ready and a status poll never reads complete,
-#: and each exchange leaves the reply's four overhead bytes unread.
-#: Adopting the observed grammar is gated on a register-data probe (the
-#: parked wire-truth work).
+#: Register reads request four response bytes (the C2 frame's N); the
+#: reply is the proven count+4 frame (#562) and the requested values are
+#: big-endian payload bytes. The old "status byte first" reading of §8 is
+#: retracted — that byte was the command counter.
 _REGISTER_READ_BYTES = 4
 
 _FPGA_POLL_TIMEOUT_MS_DEFAULT = 1000
+
+#: After a C3 frame the adapter drains at most this many reply bytes
+#: without an exact-length contract (fold R3; a C3 ACK, if the device
+#: sends one, is expected to be the 3-byte shape — headroom only).
+_C3_DRAIN_MAX_BYTES = 8
+
+#: Pin-poll pacing (fold R17): the pin byte answers on the device's
+#: application timer; a bare poll loop busy-polls the transport between
+#: timer ticks. Same check-then-sleep shape as the gate loop (fold R12).
+_PIN_POLL_PACE_S = 0.005
 
 
 class Plugin:
@@ -101,6 +94,7 @@ class Plugin:
         self._rate_word = None  # last packed C1/C2 rate word (C3 carries it)
         self._configurations = {}  # configuration_id -> class configure input
         self._acquisitions = {}  # acquisition_id -> configuration_id
+        self._last_counter = None  # last parsed reply's command counter (#562)
         # The counter is a multiplexer: one select/gate/count sequence must
         # never interleave with another, or the wrong channel's count comes
         # back tagged ``quality: "valid"``.
@@ -288,29 +282,33 @@ class Plugin:
     # -- operations --------------------------------------------------------
 
     async def _read_status(self, context):
-        """C2 read of register 0x100000; the status byte is response byte 0.
+        """Status read via the proven reply grammar, as the standard receipt.
 
-        The status-byte map is the static decode of record section 5c —
-        NOT hardware-decoded: the 2026-10-12 four-byte read that seemed to
-        confirm it is withdrawn (its tool truncates; record section 10),
-        and every address the read-only probes tried answered zero data.
-        The receive framing here is the static decode's n-byte form; the
-        observed reply grammar (count plus four overhead bytes) does not
-        match it, and this read path cannot complete against observed
-        hardware until the adapter consumes the observed grammar.
+        The recorded status-bit decode was wrong: the byte the earlier
+        probes read there was the command counter (#562). The receipt's
+        ``value`` IS that counter byte (fold R2 ruling — a counter is
+        device state; disclosed in protocol.md), so ``data.get("value")``
+        renders the truth on the readings surface. The aux header byte's
+        meaning is unproven — recorded as evidence with the counter,
+        never interpreted. No completion is derivable until a gate source
+        is pinned.
         """
-        word = proto.wire_address(proto.REG_STATUS)
-        await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
-        data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
-        byte = proto.parse_read_byte(data)
-        bits = proto.decode_status(byte)
+        frame = await self._read_reply(
+            context,
+            proto.frame_c2(proto.wire_address(proto.REG_STATUS), _REGISTER_READ_BYTES),
+            _REGISTER_READ_BYTES,
+        )
         await self.services.record_evidence(
-            {"kind": "logicport.status", "raw": byte, "complete": bits.capture_complete},
+            {
+                "kind": proto.EVIDENCE_STATUS_AUX,
+                "counter": frame.counter,
+                "aux": frame.aux,
+            },
             context,
         )
         return {
             "parameter": "status",
-            "value": byte,
+            "value": frame.counter,
             "unit": "count",
             "observed_at": self.services.utc_now(),
             "age_ms": 0,
@@ -318,12 +316,27 @@ class Plugin:
             "source": "device",
         }
 
+    async def _read_reply(self, context, c2_frame: bytes, count: int) -> proto.ReplyFrame:
+        """Send one C2 frame and parse its count+4 reply through the
+        hardware-proven grammar (counter continuity enforced)."""
+        await self._send_frame(c2_frame, context)
+        raw = await self._receive(context, count + 4, exact_bytes=count + 4)
+        frame = proto.parse_reply(raw)
+        await self._advance_counter(frame.counter, context)
+        return frame
+
     async def _read_trigger_position(self, context):
-        """C2 read of register 0x10000A: the trigger position word (§5b)."""
-        word = proto.wire_address(proto.REG_TRIGGER_POSITION)
-        await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
-        data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
-        value = proto.parse_read_word(data)
+        """C2 read of register 0x10000A: the trigger position word (§5b).
+
+        The word is the reply payload's first two bytes, big-endian; the
+        payload itself arrives inside the proven count+4 frame (#562).
+        """
+        frame = await self._read_reply(
+            context,
+            proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES),
+            _REGISTER_READ_BYTES,
+        )
+        value = proto.parse_read_word(frame.payload)
         return {
             "parameter": "trigger_position",
             "value": value,
@@ -342,10 +355,11 @@ class Plugin:
         """
         if self._rate_word is not None and (self._rate_word >> 16) != (word >> 16):
             # The clock select changed: the host sends 0xC3 first (§3.1).
+            # Fold R3: the C3 reply shape is unproven — drain, never parse.
             await self._send_frame(proto.frame_c3(self._rate_word & 0xFFFF), context)
-            await self._drain_ack(context)
+            await self._c3_drain(context)
         await self._send_frame(proto.frame_c1(word, proto.payload_byte(proto.RATE_COMMAND_PAYLOAD)), context)
-        await self._drain_ack(context)
+        await self._ack_write(context)
         self._rate_word = word
         return {
             "operation_id": operation_id,
@@ -367,7 +381,7 @@ class Plugin:
         await self._send_frame(
             proto.frame_c1(word, proto.payload_word(code)), context
         )
-        await self._drain_ack(context)
+        await self._ack_write(context)
         return {
             "operation_id": operation_id,
             "verb": verb,
@@ -429,7 +443,8 @@ class Plugin:
         remaining()
         await context.mark_dispatch_started()
         await self._send_frame(proto.frame_c3(word), context)
-        await self._drain_ack(context)
+        # Fold R3: the C3 reply shape is unproven — drain, never parse.
+        await self._c3_drain(context)
         return {
             "operation_id": operation_id,
             "verb": verb,
@@ -471,7 +486,7 @@ class Plugin:
         ):
             word = proto.wire_address(register)
             await self._send_frame(proto.frame_c1(word, proto.trigger_mask_payload(mask)), context)
-            await self._drain_ack(context)
+            await self._ack_write(context)
         return {
             "operation_id": operation_id,
             "verb": verb,
@@ -574,6 +589,10 @@ class Plugin:
                 # The section 5 completion: normal mode (inside the pass),
                 # then the resync flush, then the rate command — whose
                 # payload byte is an open item, so the resend is skipped.
+                # A DONE-less pass never reaches this branch: the pass
+                # fails, the loop retries (#562 Task 6's invariant — a
+                # DONE-less pass is never ok — with the C loader's retry
+                # shape), and exhaustion reports TRANSPORT_ERROR uncertain.
                 flush_ok = await self._resync_flush(context)
                 return {
                     "operation_id": operation_id,
@@ -611,7 +630,14 @@ class Plugin:
         A host that reports no ``sent`` count is taken at its word (the
         reply carries no accounting); a reported short send is a failed
         transfer — the bitstream the device saw is not the bitstream we
-        hold, and the pass must not press on to the DONE poll.
+        hold, and the pass must not press on to the DONE poll. The serial
+        transport additionally raises ConnectionError("serial write
+        reported N of M bytes") whenever sent != len(data) on a real
+        link (benchweave_sdk_server serial.py); that exception propagates
+        to the action's failure envelope through execute()'s ConnectionError
+        handler (#562 wire-truth Task 7; both postures pinned by
+        test_configure_fpga_fails_a_short_bitstream_send and
+        test_configure_fpga_short_write_propagates).
         """
         reply = await self.services.transfer(proto.stream_send(data), context)
         sent = reply.get("sent") if isinstance(reply, dict) else None
@@ -623,7 +649,7 @@ class Plugin:
         DONE must assert for the pass to count (§5 step 10): the C loader
         retries the whole sequence when it does not, and so does the
         caller's attempt loop. A short bitstream send fails the pass the
-        same way.
+        same way. Neither failure ever reports ok (#562 Task 6).
         """
         await self.services.transfer(proto.ftdi_purge("rx"), context)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
@@ -668,6 +694,10 @@ class Plugin:
                 return False
             if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
                 raise TimeoutError("Cancelled or expired")
+            # Pace the poll (fold R17): same check-then-sleep shape as the
+            # frequency gate loop — a bare loop busy-polls the transport
+            # between the device's application-timer ticks.
+            await asyncio.sleep(_PIN_POLL_PACE_S)
 
     async def _action_read_samples(self, context, operation_id, verb, inputs):
         """Plane reads + ping-pong de-interleave + RLE decode (§6)."""
@@ -701,29 +731,22 @@ class Plugin:
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
-        # Capture-complete gate (record §5c): the planes are drained only
-        # when status bit 0 is set. Reading a running capture tears one
-        # dataset across two buffer generations and would stamp it complete.
-        status_frame = proto.frame_c2(proto.wire_address(proto.REG_STATUS), _REGISTER_READ_BYTES)
-        complete = False
-        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
-            await self._send_frame(status_frame, context)
-            data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
-            bits = proto.decode_status(proto.parse_read_byte(data))
-            if bits.capture_complete:
-                complete = True
-                break
-            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
-                break
-        if not complete:
-            # Frames were already exchanged: an uncertain outcome, never a
-            # clean failure.
-            raise TimeoutError("capture did not complete before the sample read")
+        # No gate source is proven (#562): the byte the old poll loop read
+        # bit 0 from was the command counter, so the planes drain without a
+        # capture-complete wait. The hook records that honest ungated state
+        # once per action. When a proven gate source lands (the aux byte?
+        # the arming path?), a `_capture_gate(context)` helper replaces
+        # this hook — the register-slot pattern: one assignment completes it.
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_CAPTURE_GATE, "source": None}, context
+        )
         # Trigger position word (register 0x10000A) for the page base (§6.1).
-        word = proto.wire_address(proto.REG_TRIGGER_POSITION)
-        await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
-        data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
-        trigger_position = proto.parse_read_word(data)
+        frame = await self._read_reply(
+            context,
+            proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES),
+            _REGISTER_READ_BYTES,
+        )
+        trigger_position = proto.parse_read_word(frame.payload)
         page_base = (trigger_position + 1 + prescale) % proto.PAGE_STRIDE
         chunk = (column_count + 1) // 2
 
@@ -732,8 +755,8 @@ class Plugin:
             planes = []
             for plane in range(5):
                 address = proto.sample_plane_wire_address(plane, page_base + page * proto.PAGE_STRIDE)
-                await self._send_frame(proto.frame_c2(address, chunk), context)
-                planes.append(await self._receive(context, chunk, exact_bytes=chunk))
+                plane_frame = await self._read_reply(context, proto.frame_c2(address, chunk), chunk)
+                planes.append(plane_frame.payload)
             pages.append(planes)
 
         columns = proto.deinterleave_pages(pages[0], pages[1])
@@ -757,6 +780,198 @@ class Plugin:
             "status": "ok",
             "data": result,
         }
+
+    async def _resync_flush(self, context) -> bool:
+        """One section 3.4 resync attempt: re-init, purges, zero flushes,
+        the 0x01 marker, purges. True when the attempt completes.
+
+        The flush sizes' sent counts come back in the stream-send reply
+        when the host reports them; a host that reports a short flush
+        fails the attempt. On success the counter view re-baselines (fold
+        R4): the flush is the deliberate recovery path, so the next reply's
+        ANY counter is acceptable — recorded as evidence.
+        """
+        await self._init_sequence(context)
+        await self.services.transfer(proto.ftdi_purge("tx"), context)
+        await self.services.transfer(proto.ftdi_purge("rx"), context)
+        for count, minimum in (
+            (proto.RESYNC_FLUSH_LONG, proto.RESYNC_FLUSH_LONG_MIN_SENT),
+            (proto.RESYNC_FLUSH_SHORT, proto.RESYNC_FLUSH_SHORT),
+        ):
+            reply = await self.services.transfer(proto.stream_send(b"\x00" * count), context)
+            sent = reply.get("sent") if isinstance(reply, dict) else None
+            if sent is not None and sent < minimum:
+                return False
+        reply = await self.services.transfer(
+            proto.stream_send(bytes([proto.RESYNC_MARKER])), context
+        )
+        sent = reply.get("sent") if isinstance(reply, dict) else None
+        if sent is not None and sent < 1:
+            return False
+        await self.services.transfer(proto.ftdi_purge("tx"), context)
+        await self.services.transfer(proto.ftdi_purge("rx"), context)
+        self._last_counter = None
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_COUNTER_REBASELINED}, context
+        )
+        return True
+
+    async def _init_sequence(self, context):
+        """The section 4 handshake the adapter drives through the dialect."""
+        await self.services.transfer(proto.ftdi_reset_device(), context)
+        await self.services.transfer(proto.ftdi_set_timeouts(), context)
+        await self.services.transfer(proto.ftdi_set_latency(), context)
+        await self.services.transfer(proto.ftdi_set_baud(), context)
+        # Fold R4: the FTDI re-init can reset the device's counter view —
+        # drop the baseline; the first observed reply re-sets it, and the
+        # rebaseline itself is evidence.
+        self._last_counter = None
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_COUNTER_REBASELINED}, context
+        )
+
+    async def _send_frame(self, frame, context):
+        await self.services.transfer(proto.stream_send(frame), context)
+
+    async def _receive(self, context, max_bytes, exact_bytes):
+        reply = await self.services.transfer(
+            proto.stream_receive(max_bytes, exact_bytes), context
+        )
+        data = reply.get("data") if isinstance(reply, dict) else None
+        if not isinstance(data, bytes):
+            raise ValueError("receive returned no bytes")
+        return data
+
+    async def _ack_write(self, context) -> proto.ReplyFrame:
+        """The hardware-proven ACK: exactly 3 bytes (write_probe, #562)."""
+        raw = await self._receive(context, 3, exact_bytes=3)
+        frame = proto.parse_write_ack(raw)
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_WRITE_ACK, "bytes": 3, "counter": frame.counter},
+            context,
+        )
+        await self._advance_counter(frame.counter, context)
+        return frame
+
+    async def _c3_drain(self, context) -> None:
+        """Bounded quiet-tolerant drain after a C3 frame (fold R3).
+
+        The C3 reply shape is UNPROVEN — the 2026-10-26 probe never sent
+        C3 — so nothing here is parsed. The drain takes whatever the device
+        has already delivered (at most ``_C3_DRAIN_MAX_BYTES``; the budget
+        is the transport's own receive timeout, the old quiet-tolerant
+        shape: no exact byte count) and records the byte count as evidence.
+
+        The drain NEVER advances the counter view: if the device does ACK
+        C3 frames with a counter advance, the next parsed reply will
+        register a counter gap — that gap evidence is what surfaces the
+        true C3 reply shape on hardware (honest by design; disclosed in
+        protocol.md).
+        """
+        raw = await self._receive(context, _C3_DRAIN_MAX_BYTES, None)
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_C3_DRAIN, "bytes": len(raw)}, context
+        )
+
+    async def _advance_counter(self, counter, context):
+        """One counter sequences reads and writes; a gap is evidence + refusal.
+
+        The counter is one byte, so continuity is modular (fold R1): the
+        next expected value is ``(last + 1) & 0xFF`` and 0xFF -> 0x00
+        continues rather than gapping. Same-counter duplicates and steps
+        of two or more still refuse.
+        """
+        if self._last_counter is not None and ((counter - self._last_counter) & 0xFF) != 1:
+            expected = (self._last_counter + 1) & 0xFF
+            await self.services.record_evidence(
+                {"kind": proto.EVIDENCE_COUNTER_GAP,
+                 "expected": expected, "saw": counter}, context)
+            raise ValueError(
+                f"command counter gap: expected {expected:#04x},"
+                f" saw {counter:#04x}")
+        self._last_counter = counter
+
+    def _deadline_check(self, context):
+        services = self.services
+
+        def remaining():
+            deadline = context.deadline_monotonic
+            if (
+                not math.isfinite(deadline)
+                or context.is_cancelled()
+                or services.monotonic() >= deadline
+            ):
+                raise TimeoutError("Cancelled or expired")
+
+        return remaining
+
+    # -- fold-in round 2: frequency counter, trigger position, sequencer ---
+
+    async def _read_frequency(self, context, channel):
+        """The multiplexed counter: select, wait ready, read the count.
+
+        Selecting the channel is a C1 write — declared per parameter
+        through ``read_policy.side_effect: state_change`` (which escalates
+        the read verb, OTDP S20), and exposed to procedures as the typed
+        ``read_counter`` action an allow rule can admit (the execution
+        contract excludes state-changing core reads from procedures). The
+        ready gate reads 0 when the count is settled, and Hz = count x 10.
+
+        The whole select/gate/count sequence holds the counter lock, and a
+        not-ready gate re-polls only after ``FREQ_POLL_INTERVAL_MIN_MS``
+        (the record's confirmed floor: counter polls wait longer than
+        75 ms; the adapter floor is 100 ms). Every exchange parses through
+        the proven reply grammar (#562) with cross-direction counter
+        continuity enforced.
+        """
+        if not 0 <= channel < proto.FREQ_CHANNELS:
+            raise ValueError("counter channel must be 0..3")
+        async with self._counter_lock:
+            hz = await self._read_counter_channel(context, channel)
+        return {
+            "parameter": f"frequency_{chr(ord('a') + channel)}",
+            "value": hz,
+            "unit": "Hz",
+            "observed_at": self.services.utc_now(),
+            "age_ms": 0,
+            "quality": "valid",
+            "source": "device",
+        }
+
+    async def _read_counter_channel(self, context, channel) -> int:
+        """One channel's select/gate/count sequence — the caller holds the
+        counter lock (the ``read_counter`` action holds it across its
+        whole four-channel sweep)."""
+        await self._send_frame(
+            proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
+            context,
+        )
+        await self._ack_write(context)
+        gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
+        floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
+        last_poll: float | None = None
+        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
+            if last_poll is not None:
+                # Check-then-sleep (fold R12): a cancelled or expired
+                # operation must fail before spending its remaining budget
+                # sleeping — the cancel check below ran before this pace.
+                remaining = floor_s - (self.services.monotonic() - last_poll)
+                if remaining > 0:
+                    await _pace_wait(remaining)
+            frame = await self._read_reply(context, gate_frame, 1)
+            last_poll = self.services.monotonic()
+            if proto.freq_ready(frame.payload[0]):
+                break
+            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
+                raise TimeoutError("Cancelled or expired")
+        else:
+            raise TimeoutError("frequency counter never became ready")
+        count_frame = await self._read_reply(
+            context,
+            proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4),
+            4,
+        )
+        return proto.frequency_hz(proto.parse_read_dword(count_frame.payload))
 
     async def _action_read_counter(self, context, operation_id, verb, inputs):
         """The counter read as a typed invoke action — the procedure path.
@@ -797,148 +1012,6 @@ class Plugin:
             },
         }
 
-    async def _resync_flush(self, context) -> bool:
-        """One section 3.4 resync attempt: re-init, purges, zero flushes,
-        the 0x01 marker, purges. True when the attempt completes.
-
-        The flush sizes' sent counts come back in the stream-send reply
-        when the host reports them; a host that reports a short flush
-        fails the attempt.
-        """
-        await self._init_sequence(context)
-        await self.services.transfer(proto.ftdi_purge("tx"), context)
-        await self.services.transfer(proto.ftdi_purge("rx"), context)
-        for count, minimum in (
-            (proto.RESYNC_FLUSH_LONG, proto.RESYNC_FLUSH_LONG_MIN_SENT),
-            (proto.RESYNC_FLUSH_SHORT, proto.RESYNC_FLUSH_SHORT),
-        ):
-            reply = await self.services.transfer(proto.stream_send(b"\x00" * count), context)
-            sent = reply.get("sent") if isinstance(reply, dict) else None
-            if sent is not None and sent < minimum:
-                return False
-        reply = await self.services.transfer(
-            proto.stream_send(bytes([proto.RESYNC_MARKER])), context
-        )
-        sent = reply.get("sent") if isinstance(reply, dict) else None
-        if sent is not None and sent < 1:
-            return False
-        await self.services.transfer(proto.ftdi_purge("tx"), context)
-        await self.services.transfer(proto.ftdi_purge("rx"), context)
-        return True
-
-    async def _init_sequence(self, context):
-        """The section 4 handshake the adapter drives through the dialect."""
-        await self.services.transfer(proto.ftdi_reset_device(), context)
-        await self.services.transfer(proto.ftdi_set_timeouts(), context)
-        await self.services.transfer(proto.ftdi_set_latency(), context)
-        await self.services.transfer(proto.ftdi_set_baud(), context)
-
-    async def _send_frame(self, frame, context):
-        await self.services.transfer(proto.stream_send(frame), context)
-
-    async def _receive(self, context, max_bytes, exact_bytes):
-        reply = await self.services.transfer(
-            proto.stream_receive(max_bytes, exact_bytes), context
-        )
-        data = reply.get("data") if isinstance(reply, dict) else None
-        if not isinstance(data, bytes):
-            raise ValueError("receive returned no bytes")
-        return data
-
-    async def _drain_ack(self, context):
-        """Drain the post-write ACK bytes (§3.1); quiet is acceptable.
-
-        The observed ACK is exactly three bytes (C1, 00, command counter —
-        record section 10, 2026-10-26); this drain stays quiet-tolerant
-        and records the byte count as evidence rather than parsing it,
-        because the adapter does not yet parse the observed reply grammar
-        (wire-truth work, parked) and the mock rehearses a quiet line.
-        """
-        data = await self._receive(context, _ACK_DRAIN_MAX_BYTES, exact_bytes=None)
-        if data:
-            await self.services.record_evidence(
-                {"kind": "logicport.write_ack", "bytes": len(data)}, context
-            )
-
-    def _deadline_check(self, context):
-        services = self.services
-
-        def remaining():
-            deadline = context.deadline_monotonic
-            if (
-                not math.isfinite(deadline)
-                or context.is_cancelled()
-                or services.monotonic() >= deadline
-            ):
-                raise TimeoutError("Cancelled or expired")
-
-        return remaining
-
-    # -- fold-in round 2: frequency counter, trigger position, sequencer ---
-
-    async def _read_frequency(self, context, channel):
-        """The multiplexed counter: select, wait ready, read the count.
-
-        Selecting the channel is a C1 write — declared per parameter
-        through ``read_policy.side_effect: state_change`` (which escalates
-        the read verb, OTDP S20), and exposed to procedures as the typed
-        ``read_counter`` action an allow rule can admit (the execution
-        contract excludes state-changing core reads from procedures). The
-        ready gate reads 0 when the count is settled, and Hz = count x 10.
-
-        The whole select/gate/count sequence holds the counter lock, and a
-        not-ready gate re-polls only after ``FREQ_POLL_INTERVAL_MIN_MS``
-        (the record's confirmed floor: counter polls wait longer than
-        75 ms; the adapter floor is 100 ms).
-        """
-        if not 0 <= channel < proto.FREQ_CHANNELS:
-            raise ValueError("counter channel must be 0..3")
-        async with self._counter_lock:
-            hz = await self._read_counter_channel(context, channel)
-        return {
-            "parameter": f"frequency_{chr(ord('a') + channel)}",
-            "value": hz,
-            "unit": "Hz",
-            "observed_at": self.services.utc_now(),
-            "age_ms": 0,
-            "quality": "valid",
-            "source": "device",
-        }
-
-    async def _read_counter_channel(self, context, channel):
-        """One channel's select/gate/count sequence — the caller holds the
-        counter lock (the ``read_counter`` action holds it across its
-        whole four-channel sweep)."""
-        await self._send_frame(
-            proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
-            context,
-        )
-        await self._drain_ack(context)
-        gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
-        floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
-        last_poll: float | None = None
-        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
-            if last_poll is not None:
-                remaining = floor_s - (self.services.monotonic() - last_poll)
-                if remaining > 0:
-                    await _pace_wait(remaining)
-            await self._send_frame(gate_frame, context)
-            last_poll = self.services.monotonic()
-            gate = proto.parse_read_byte(
-                await self._receive(context, 1, exact_bytes=1)
-            )
-            if proto.freq_ready(gate):
-                break
-            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
-                raise TimeoutError("Cancelled or expired")
-        else:
-            raise TimeoutError("frequency counter never became ready")
-        await self._send_frame(
-            proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4), context
-        )
-        count = proto.parse_read_dword(await self._receive(context, 4, exact_bytes=4))
-        return proto.frequency_hz(count)
-
     async def _action_set_trigger_position(self, context, operation_id, verb, inputs):
         """The two LE16 trigger-position writes with the offset branches."""
         allowed = {"position", "mode_flag", "clock_type"}
@@ -963,7 +1036,7 @@ class Plugin:
         await context.mark_dispatch_started()
         for frame in frames:
             await self._send_frame(frame, context)
-            await self._drain_ack(context)
+            await self._ack_write(context)
         word_a, word_b = proto.trigger_position_words(mode_flag, clock_type, position)
         return {
             "operation_id": operation_id,
@@ -1004,7 +1077,7 @@ class Plugin:
         await context.mark_dispatch_started()
         for register, payload, _label in plan:
             await self._send_frame(proto.frame_c1(proto.wire_address(register), payload), context)
-            await self._drain_ack(context)
+            await self._ack_write(context)
         return {
             "operation_id": operation_id,
             "verb": verb,
@@ -1080,7 +1153,7 @@ class Plugin:
         """Evidence row disclosing the pending device writes."""
         await self._evidence_sync(
             {
-                "kind": "logicport.configure.pending_writes",
+                "kind": proto.EVIDENCE_CONFIGURE_PENDING_WRITES,
                 "configuration_id": configuration_id,
                 "pending": [
                     "threshold DAC destination (record section 5a)",
@@ -1093,19 +1166,26 @@ class Plugin:
     async def _evidence_sync(self, entry, context):
         await self.services.record_evidence(entry, context)
 
-    def _status_state(self, bits):
-        """Map the status byte to the class arm state vocabulary."""
-        if bits.capture_complete:
-            return "complete"
-        if bits.prefill_phase == 0b00:
-            return "armed"
-        return "running"
+    def _status_state(self):
+        """The arm state vocabulary has no proven source (#562).
+
+        The status-byte bit decode this mapping used is retracted — the
+        byte was the command counter — so no armed/running/complete state
+        is derivable from the wire today.
+        """
+        return "unknown"
 
     async def _class_arm(self, context, operation_id, verb, inputs):
-        """Register the acquisition and report the device's arm state.
+        """Arm refuses until the device state has a proven wire source.
 
-        The device auto-arms after FPGA configuration; the status byte
-        answers armed/running/complete.
+        Late fold R19 (#562 battery, lane B): the vendored otdp 0.2.2 arm
+        output schema enumerates state as armed|running|complete with
+        additionalProperties:false, so the retracted-decode stand-in
+        "unknown" is schema-illegal and every conformant host would reject
+        it. The _class_configure precedent (2026-10-12 coordinator ruling)
+        refuses UNSUPPORTED rather than emit an unprovable result; arm
+        does the same until a state source is pinned (register-slot
+        pattern, same as AUX_SEMANTICS).
         """
         if set(inputs) != {"configuration_id", "acquisition_id", "max_duration_ms"}:
             return self._failure_inject(
@@ -1119,22 +1199,13 @@ class Plugin:
             return self._failure_inject(
                 operation_id, verb, "INVALID_ARGUMENT", f"unknown configuration {configuration_id!r}"
             )
-        await self._record_pending_writes(context, configuration_id)
-        remaining = self._deadline_check(context)
-        remaining()
-        await context.mark_dispatch_started()
-        data = await self._read_status(context)
-        state = self._status_state(proto.decode_status(data["value"]))
-        self._acquisitions[inputs["acquisition_id"]] = configuration_id
-        return {
-            "operation_id": operation_id,
-            "verb": verb,
-            "status": "ok",
-            "data": {
-                "action_id": "otdp.logic_analyser.arm/1.0.0",
-                "result": {"acquisition_id": inputs["acquisition_id"], "state": state},
-            },
-        }
+        return self._failure_inject(
+            operation_id,
+            verb,
+            "UNSUPPORTED",
+            "arm state has no proven wire source (#562 retracted the status-bit "
+            "decode); the class output schema forbids an unknown state",
+        )
 
     async def _class_fetch(self, context, operation_id, verb, inputs):
         """Poll the capture, drain the planes, and build the dataset.
@@ -1179,25 +1250,24 @@ class Plugin:
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
-        status_frame = proto.frame_c2(proto.wire_address(proto.REG_STATUS), _REGISTER_READ_BYTES)
-        complete = False
-        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
-            await self._send_frame(status_frame, context)
-            data = await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
-            bits = proto.decode_status(proto.parse_read_byte(data))
-            if bits.capture_complete:
-                complete = True
-                break
-            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
-                break
-        if not complete and not allow_partial:
-            return self._failure_inject(operation_id, verb, "TIMEOUT", "capture did not complete")
-        await self._send_frame(
-            proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES), context
+        # The capture gate is unproven (#562): the byte the old poll loop
+        # read bit 0 from was the command counter, so no completion bit
+        # exists to wait for. One status read is made for the counter/aux
+        # evidence and the planes drain unconditionally; the dataset
+        # reports what it drained. The hook records that honest ungated
+        # state once per action. When a proven gate source lands (aux
+        # byte? arming path?), a `_capture_gate(context)` helper replaces
+        # this hook — the register-slot pattern: one assignment completes it.
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_CAPTURE_GATE, "source": None}, context
         )
-        tp = proto.parse_read_word(
-            await self._receive(context, _REGISTER_READ_BYTES, exact_bytes=_REGISTER_READ_BYTES)
+        await self._read_status(context)
+        tp_frame = await self._read_reply(
+            context,
+            proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES),
+            _REGISTER_READ_BYTES,
         )
+        tp = proto.parse_read_word(tp_frame.payload)
         column_count = proto.columns_from_trigger_position(tp)
         chunk = (column_count + 1) // 2
         pages = []
@@ -1205,8 +1275,8 @@ class Plugin:
             planes = []
             for plane in range(5):
                 address = proto.sample_plane_wire_address(plane, (tp + 1) % proto.PAGE_STRIDE + page * proto.PAGE_STRIDE)
-                await self._send_frame(proto.frame_c2(address, chunk), context)
-                planes.append(await self._receive(context, chunk, exact_bytes=chunk))
+                plane_frame = await self._read_reply(context, proto.frame_c2(address, chunk), chunk)
+                planes.append(plane_frame.payload)
             pages.append(planes)
         columns = proto.deinterleave_pages(pages[0], pages[1])[:column_count]
         decoded = proto.decode_columns(columns)
@@ -1274,12 +1344,20 @@ class Plugin:
             "variables": variables,
             "trigger": {"source": "unknown", "time_relative_s": None},
             "status": "partial" if truncated else "complete",
-            "context": {"sample_interval_s": interval_s, "columns": column_count},
+            "context": {
+                "sample_interval_s": interval_s,
+                "columns": column_count,
+                # Fold R6: completion is NOT proven — the capture gate's
+                # source is None (no gate source pinned). The field rides
+                # the free-form context block: the OTDP dataset schema
+                # closes its top-level keys (disclosed in the fold report).
+                "completion_proven": False,
+            },
         }
         if truncated:
             dataset["status_reason"] = "max_bytes bound truncated the expanded samples"
         await self._evidence_sync(
-            {"kind": "logicport.fetch.dataset", "samples": len(samples), "truncated": truncated},
+            {"kind": proto.EVIDENCE_FETCH_DATASET, "samples": len(samples), "truncated": truncated},
             context,
         )
         return {
@@ -1297,7 +1375,8 @@ class Plugin:
         remaining()
         await context.mark_dispatch_started()
         await self._send_frame(proto.frame_c3((self._rate_word or 0) & 0xFFFF), context)
-        await self._drain_ack(context)
+        # Fold R3: the C3 reply shape is unproven — drain, never parse.
+        await self._c3_drain(context)
         self._acquisitions.pop(inputs["acquisition_id"], None)
         return {
             "operation_id": operation_id,
