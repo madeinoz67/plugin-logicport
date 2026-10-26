@@ -19,7 +19,10 @@ pass() { printf 'PASS  %s\n' "$1"; }
 # -- 1. Pin ----------------------------------------------------------------
 step "1/4 pin: install the pinned SDK and verify the running version"
 uv sync --extra test >/dev/null
-pin="$(sed -n 's/.*benchweave-sdk==\([0-9][^"]*\).*/\1/p' pyproject.toml | head -1)"
+pin="$(grep -o 'benchweave-sdk\[[^]]*\]==[0-9][0-9.]*' pyproject.toml | head -1 | sed 's/.*==//')"
+if [ -z "$pin" ]; then
+  pin="$(grep -o 'benchweave-sdk==[0-9][0-9.]*' pyproject.toml | head -1 | sed 's/.*==//')"
+fi
 running="$(run benchweave-sdk --version | sed -n 's/^benchweave-sdk, version //p')"
 if [ -z "$pin" ] || [ -z "$running" ]; then
   fail "could not read the pin (${pin:-absent}) or the running version (${running:-absent})"
