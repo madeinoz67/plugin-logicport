@@ -86,3 +86,9 @@ scripts/sdk_reentry.sh
   `scaffold_extra_absent` (the documented test environment could not run
   the documented upgrade command — the test extra now carries
   `benchweave-sdk[scaffold]`).
+- 2026-10-26, SDK 0.22.0, same branch (after the OTDP 0.2.2 → 0.2.4
+  corpus pin and the reply-grammar/read-policy work): all four steps
+  green, exit 0; gates read tests=91 failures=0 errors=0 skipped=1 from
+  the junit XML. The derive step re-pinned the descriptor digest after
+  the descriptor's corpus bump — the same motion a future SDK release
+  forces whenever the vendored corpus moves.
