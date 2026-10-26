@@ -99,6 +99,12 @@ def test_read_verb_equals_derived_maximum():
     equals the maximum over the parameters' read policies (the same
     quantity allOf[32] enforces): the escalation is derived from the
     counter declarations, never a standalone assertion.
+
+    What this derivation cannot catch on its own: it is document-internal
+    and silent about whether the adapter serves a declaring parameter — a
+    phantom parameter the adapter never reads justifies the escalation
+    just as well. test_declared_read_parameters_are_served is the twin
+    that closes that hole.
     """
     descriptor = _descriptor()
     declared = descriptor["operations"]["read"]["side_effect"]
@@ -155,6 +161,31 @@ def test_read_parameters_are_declared():
     declared = {row["name"] for row in descriptor.get("parameters", [])}
     missing = set(_READ_PARAMETERS) - declared
     assert not missing, f"served read parameter missing from the descriptor: {sorted(missing)}"
+
+
+def test_declared_read_parameters_are_served():
+    """The twin of test_read_parameters_are_declared: every declared
+    read-only parameter is one the adapter actually reads.
+
+    The escalation derivation cannot catch a phantom on its own — it is
+    document-internal, so a declared parameter the adapter never reads
+    still justifies the verb escalation (the refute's construction: a
+    phantom declaring state_change, the real declarations removed, verb
+    none — the schema still escalates and every document-level test
+    stays green). Served ⊆ declared (the other test) and declared ⊆
+    served (this one) close to equality, and equality leaves no room
+    for a phantom.
+    """
+    descriptor = _descriptor()
+    declared_ro = {
+        row["name"]
+        for row in descriptor.get("parameters", [])
+        if row.get("access") == "ro"
+    }
+    unserved = declared_ro - set(_READ_PARAMETERS)
+    assert not unserved, (
+        f"declared read-only parameters the adapter never reads: {sorted(unserved)}"
+    )
 
 
 def test_measure_channels_match_served_counter_slots():
