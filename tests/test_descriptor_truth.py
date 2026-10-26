@@ -1,12 +1,16 @@
 """Descriptor/adapter machine-truth agreement (issue #562).
 
-A declared surface the adapter refuses is a lie the host schedules around:
-``side_effect`` drives concurrency and an advertised action is expected to
-run. These tests pin the agreement both ways — every adapter-bound action
-declared in the descriptor is served by the adapter, and every channel the
-adapter serves is declared with the parameters that serve it. The counter
-reads declare their mux-select write through ``read_policy.side_effect``
-and the read verb escalates with them (OTDP 0.2.3+ S20).
+A declared surface the adapter refuses is a lie the host can admit
+against: ``side_effect`` classifies operations for admission — the
+execution contract excludes state-changing core reads from procedures,
+and the host admits every advertised action — so the descriptor must say
+exactly what the adapter serves. These tests pin the agreement both ways —
+every adapter-bound action declared in the descriptor is served by the
+adapter, and every channel the adapter serves is declared with the
+parameters that serve it. The counter reads declare their mux-select
+write through ``read_policy.side_effect`` (escalating the read verb, OTDP
+0.2.3+ S20), and the state-changing read reaches procedures as the typed
+``read_counter`` action a bench allow rule can admit.
 """
 
 import hashlib
@@ -29,6 +33,35 @@ def _descriptor():
 
 def _package_bytes(name):
     return files("logicport_plugin").joinpath(name).read_bytes()
+
+
+def test_read_counter_action_is_served_and_declared():
+    """The execution contract's sanctioned path for a state-changing
+    read: a typed invoke action an allow rule can admit (the core read
+    verb is excluded from procedures by the contract's own sentence)."""
+    descriptor = _descriptor()
+    action = descriptor.get("actions", {}).get("read_counter")
+    assert action is not None, "the typed read_counter action is not declared"
+    assert action["side_effect"] == "state_change"
+    assert action["binding"] == {"kind": "adapter", "key": "read_counter"}
+    assert "read_counter" in _INVOKE_ACTIONS, "declared but refused by the adapter"
+
+
+def test_profile_pins_the_descriptors_otdp_version():
+    """The plugin-authored profile document carries the same OTDP version
+    as the descriptor that pins it in ``contracts``."""
+    descriptor = _descriptor()
+    profile = json.loads(_package_bytes("logicport-profile.json"))
+    assert profile["otdp_version"] == descriptor["otdp_version"]
+
+
+def test_contract_digests_pin_their_files():
+    """Every ``contracts`` row's SHA-256 is the real digest of the file it
+    names — a pin that drifts from its file is a stale claim."""
+    descriptor = _descriptor()
+    for row in descriptor["contracts"]:
+        digest = hashlib.sha256(_package_bytes(row["path"])).hexdigest()
+        assert digest == row["sha256"], f"{row['path']} moved; its pin is stale"
 
 
 def test_counter_reads_declare_state_change():

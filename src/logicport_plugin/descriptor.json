@@ -627,7 +627,7 @@
         {
             "id": "urn:logicport:profile:1.0.0",
             "path": "logicport-profile.json",
-            "sha256": "75db8566519216a2591fde2864d204d1b8391c4170684e44791e226e852d456d"
+            "sha256": "26127c072762340d932e33f0855e37759a2d417a04132815e739247f6e94d0fd"
         },
         {
             "id": "urn:otdp:measurement:0.2.4",
@@ -1075,6 +1075,21 @@
                 "kind": "adapter",
                 "key": "configure_sequencer"
             }
+        },
+        "read_counter": {
+            "binding": {
+                "kind": "adapter",
+                "key": "read_counter"
+            },
+            "input_constraints": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            "timeout_ms": 10000,
+            "side_effect": "state_change",
+            "cancellable": true,
+            "retry": "never"
         }
     }
 }

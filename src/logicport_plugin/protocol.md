@@ -125,8 +125,14 @@ read verb to `state_change` (OTDP 0.2.4 rule S20 — the corpus this
 descriptor pins). The escalation is verb-wide: reads of side-effect-free
 parameters inherit the `state_change` declaration too, a conservative
 over-classification the schema permits; per-read granularity does not
-exist, and that is the residual limit. The counter registers were never
-probed on hardware — the decode comes from the static analysis of
+exist, and that is the residual limit. Because the execution contract
+excludes state-changing core reads from procedures, the same locked
+sequences are also exposed as the typed `read_counter` invoke action —
+one sweep of all four channels under one lock hold (the device's
+round-robin unit), `side_effect: state_change` — the shape a bench
+admits through a per-device allow rule; procedures use the action,
+interactive hosts keep the read parameters. The counter registers were
+never probed on hardware — the decode comes from the static analysis of
 `LogicPort.exe`.
 
 ## Reader bounds, trigger position, sequencer (record: confirmed)
@@ -169,9 +175,12 @@ can mint, declaring the profile while refusing either action left a
 declared surface the adapter refuses — dead wire the host could schedule
 against. The honest direction is de-advertisement: the four counter
 channels stay declared (all four — the adapter serves slots 0-3) and are
-served by the `read frequency_a..d` parameters, which are adapter-bound,
-tested against the mock, and disclose the mux-write side effect the
-verb-wide read policy cannot.
+served by the `read frequency_a..d` parameters (interactive hosts) and
+the typed `read_counter` action (procedures; the execution contract
+excludes state-changing core reads from procedures and admits the typed
+action through an allow rule), all adapter-bound and tested against the
+mock, with the mux-write side effect declared through
+`read_policy.side_effect` on each parameter.
 
 ## Open items (loud refusals, not guesses)
 
@@ -214,9 +223,15 @@ this package: the ACK-length open item is closed at the grammar level;
 the status byte and the register map are NOT hardware-decoded; the
 low-16 address decomposition is untested against register data; and the
 adapter's C2 exchanges still receive `n` raw bytes as register data per
-the static decode — adopting the observed count-plus-header grammar is
-future work gated on a register-data probe (the parked wire-truth
-issue), not a change made here.
+the static decode. The reply grammar is OBSERVED and the adapter's
+n-byte receive is the static-decode framing the observed grammar
+contradicts — until the adapter consumes the observed grammar, its read
+path cannot complete against observed hardware (the n-byte receive
+takes the reply's C2 echo as its first data byte, so a gate poll never
+reads ready and a status poll never reads complete, and each exchange
+leaves the reply's four overhead bytes unread). Adopting the observed
+count-plus-header grammar is future work gated on a register-data probe
+(the parked wire-truth issue), not a change made here.
 
 Each open item is a named constant in `protocol.py`
 (`REGISTER_THRESHOLD_DAC`, `REGISTER_TRIGGER_MASK_A/B`,

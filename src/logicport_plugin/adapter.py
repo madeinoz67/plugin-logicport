@@ -54,6 +54,7 @@ _INVOKE_ACTIONS = frozenset(
         "stop",
         "resync",
         "read_samples",
+        "read_counter",
         "otdp.logic_analyser.configure/1.0.0",
         "otdp.logic_analyser.arm/1.0.0",
         "otdp.logic_analyser.fetch/1.0.0",
@@ -76,10 +77,17 @@ _ACK_DRAIN_MAX_BYTES = 8
 
 #: C2 register reads request four bytes; the static decode takes the
 #: status byte as the first reply byte and the trigger position word as
-#: the first two (big-endian). NOT hardware-decoded: the observed reply
-#: runs the requested count plus a four-byte header with zero data at
-#: every probed address (record section 10) — the receive framing is a
-#: hypothesis until a register-data probe lands.
+#: the first two (big-endian). The reply GRAMMAR is observed (record
+#: section 10: the reply runs the requested count plus four bytes of
+#: overhead — the C2 echo, a zero byte, the command counter — before the
+#: data); this n-byte receive is the static-decode framing, which that
+#: observed grammar contradicts. Until the adapter consumes the observed
+#: grammar its read path cannot complete against observed hardware: the
+#: n-byte receive takes the reply's C2 echo as its first data byte, so a
+#: gate poll never reads ready and a status poll never reads complete,
+#: and each exchange leaves the reply's four overhead bytes unread.
+#: Adopting the observed grammar is gated on a register-data probe (the
+#: parked wire-truth work).
 _REGISTER_READ_BYTES = 4
 
 _FPGA_POLL_TIMEOUT_MS_DEFAULT = 1000
@@ -286,6 +294,10 @@ class Plugin:
         NOT hardware-decoded: the 2026-10-12 four-byte read that seemed to
         confirm it is withdrawn (its tool truncates; record section 10),
         and every address the read-only probes tried answered zero data.
+        The receive framing here is the static decode's n-byte form; the
+        observed reply grammar (count plus four overhead bytes) does not
+        match it, and this read path cannot complete against observed
+        hardware until the adapter consumes the observed grammar.
         """
         word = proto.wire_address(proto.REG_STATUS)
         await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
@@ -386,6 +398,8 @@ class Plugin:
             return await self._action_resync(context, operation_id, verb, inputs)
         if action_id == "read_samples":
             return await self._action_read_samples(context, operation_id, verb, inputs)
+        if action_id == "read_counter":
+            return await self._action_read_counter(context, operation_id, verb, inputs)
         if action_id == "otdp.logic_analyser.configure/1.0.0":
             return await self._class_configure(context, operation_id, verb, inputs)
         if action_id == "otdp.logic_analyser.arm/1.0.0":
@@ -744,6 +758,45 @@ class Plugin:
             "data": result,
         }
 
+    async def _action_read_counter(self, context, operation_id, verb, inputs):
+        """The counter read as a typed invoke action — the procedure path.
+
+        The execution contract excludes state-changing core reads from
+        procedures; this action carries the same poll-floored
+        select/gate/count sequences as the ``read frequency_*`` parameters
+        in the typed shape a bench's allow rule admits. It is a single
+        locked sweep of all four channels — the device's own round-robin
+        unit (the vectors rehearse exactly this cycle) — so one admitted
+        procedure step returns every counter. Interactive hosts keep the
+        read parameters; procedures use this action.
+        """
+        if inputs != {}:
+            return self._failure_inject(
+                operation_id, verb, "INVALID_ARGUMENT", "read_counter takes no input"
+            )
+        remaining = self._deadline_check(context)
+        remaining()
+        await context.mark_dispatch_started()
+        async with self._counter_lock:
+            frequencies = {
+                name: await self._read_counter_channel(context, slot)
+                for name, slot in _FREQUENCY_SLOTS.items()
+            }
+        return {
+            "operation_id": operation_id,
+            "verb": verb,
+            "status": "ok",
+            "data": {
+                "action_id": "read_counter",
+                "result": {
+                    "frequencies_hz": frequencies,
+                    "unit": "Hz",
+                    "quality": "valid",
+                    "source": "device",
+                },
+            },
+        }
+
     async def _resync_flush(self, context) -> bool:
         """One section 3.4 resync attempt: re-init, purges, zero flushes,
         the 0x01 marker, purges. True when the attempt completes.
@@ -826,10 +879,12 @@ class Plugin:
     async def _read_frequency(self, context, channel):
         """The multiplexed counter: select, wait ready, read the count.
 
-        Selecting the channel is a C1 write (a device state change the
-        verb-wide read policy cannot declare — disclosed in the descriptor
-        parameter descriptions and the standards-gap report), the ready
-        gate reads 0 when the count is settled, and Hz = count x 10.
+        Selecting the channel is a C1 write — declared per parameter
+        through ``read_policy.side_effect: state_change`` (which escalates
+        the read verb, OTDP S20), and exposed to procedures as the typed
+        ``read_counter`` action an allow rule can admit (the execution
+        contract excludes state-changing core reads from procedures). The
+        ready gate reads 0 when the count is settled, and Hz = count x 10.
 
         The whole select/gate/count sequence holds the counter lock, and a
         not-ready gate re-polls only after ``FREQ_POLL_INTERVAL_MIN_MS``
@@ -839,43 +894,50 @@ class Plugin:
         if not 0 <= channel < proto.FREQ_CHANNELS:
             raise ValueError("counter channel must be 0..3")
         async with self._counter_lock:
-            await self._send_frame(
-                proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
-                context,
+            hz = await self._read_counter_channel(context, channel)
+        return {
+            "parameter": f"frequency_{chr(ord('a') + channel)}",
+            "value": hz,
+            "unit": "Hz",
+            "observed_at": self.services.utc_now(),
+            "age_ms": 0,
+            "quality": "valid",
+            "source": "device",
+        }
+
+    async def _read_counter_channel(self, context, channel):
+        """One channel's select/gate/count sequence — the caller holds the
+        counter lock (the ``read_counter`` action holds it across its
+        whole four-channel sweep)."""
+        await self._send_frame(
+            proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel)),
+            context,
+        )
+        await self._drain_ack(context)
+        gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
+        floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
+        last_poll: float | None = None
+        for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
+            if last_poll is not None:
+                remaining = floor_s - (self.services.monotonic() - last_poll)
+                if remaining > 0:
+                    await _pace_wait(remaining)
+            await self._send_frame(gate_frame, context)
+            last_poll = self.services.monotonic()
+            gate = proto.parse_read_byte(
+                await self._receive(context, 1, exact_bytes=1)
             )
-            await self._drain_ack(context)
-            gate_frame = proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1)
-            floor_s = proto.FREQ_POLL_INTERVAL_MIN_MS / 1000.0
-            last_poll: float | None = None
-            for _ in range(_STATUS_POLL_MAX_ATTEMPTS):
-                if last_poll is not None:
-                    remaining = floor_s - (self.services.monotonic() - last_poll)
-                    if remaining > 0:
-                        await _pace_wait(remaining)
-                await self._send_frame(gate_frame, context)
-                last_poll = self.services.monotonic()
-                gate = proto.parse_read_byte(
-                    await self._receive(context, 1, exact_bytes=1)
-                )
-                if proto.freq_ready(gate):
-                    break
-                if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
-                    raise TimeoutError("Cancelled or expired")
-            else:
-                raise TimeoutError("frequency counter never became ready")
-            await self._send_frame(
-                proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4), context
-            )
-            count = proto.parse_read_dword(await self._receive(context, 4, exact_bytes=4))
-            return {
-                "parameter": f"frequency_{chr(ord('a') + channel)}",
-                "value": proto.frequency_hz(count),
-                "unit": "Hz",
-                "observed_at": self.services.utc_now(),
-                "age_ms": 0,
-                "quality": "valid",
-                "source": "device",
-            }
+            if proto.freq_ready(gate):
+                break
+            if context.is_cancelled() or self.services.monotonic() >= context.deadline_monotonic:
+                raise TimeoutError("Cancelled or expired")
+        else:
+            raise TimeoutError("frequency counter never became ready")
+        await self._send_frame(
+            proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4), context
+        )
+        count = proto.parse_read_dword(await self._receive(context, 4, exact_bytes=4))
+        return proto.frequency_hz(count)
 
     async def _action_set_trigger_position(self, context, operation_id, verb, inputs):
         """The two LE16 trigger-position writes with the offset branches."""

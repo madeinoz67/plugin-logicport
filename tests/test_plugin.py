@@ -72,7 +72,7 @@ def test_identify_is_static_no_io():
     asyncio.run(run())
 
 
-def test_read_status_hardware_capture():
+def test_read_status_decodes_the_constructed_fixture():
     async def run():
         # A constructed fixture, NOT a hardware capture: the 2026-10-12
         # four-byte E0 read is withdrawn evidence (its tool truncates at
@@ -681,6 +681,53 @@ def test_read_frequency_rejects_unknown():
         request = _request("read", {"parameter": "frequency_e"})
         result = await plugin.execute(request, context)
         assert result["error"]["code"] == "INVALID_ARGUMENT"
+        await plugin.close(context)
+    asyncio.run(run())
+
+
+def test_invoke_read_counter_channel():
+    """The typed counter read: the execution contract's sanctioned path
+    for a state-changing read (a core read verb declaring state_change is
+    excluded from procedures; this action is what an allow rule admits).
+    One locked sweep of all four channels — the device's round-robin
+    unit, the vectors' exact cycle shape."""
+    async def run():
+        host = MockHost(
+            _freq_script(0) + _freq_script(1) + _freq_script(2) + _freq_script(3)
+        )
+        plugin = create_plugin()
+        context = MockContext("op-1", deadline_monotonic=20.0)
+        await plugin.open(_descriptor(), host, context)
+        request = _request("invoke", {"action_id": "read_counter", "input": {}})
+        result = await plugin.execute(request, context)
+        validate_result(result, request)
+        assert result["status"] == "ok", result
+        assert result["data"]["action_id"] == "read_counter"
+        assert result["data"]["result"] == {
+            "frequencies_hz": {
+                "frequency_a": 1234560,
+                "frequency_b": 1234560,
+                "frequency_c": 1234560,
+                "frequency_d": 1234560,
+            },
+            "unit": "Hz",
+            "quality": "valid",
+            "source": "device",
+        }
+        host.assert_complete()
+        await plugin.close(context)
+        # Stray inputs refuse before any transmit.
+        host = MockHost([])
+        plugin = create_plugin()
+        context = MockContext("op-2", deadline_monotonic=1.0)
+        await plugin.open(_descriptor(), host, context)
+        for bad in ({"channel": "a"}, {"bogus": 1}):
+            request = _request("invoke", {"action_id": "read_counter", "input": bad})
+            result = await plugin.execute(request, context)
+            validate_result(result, request)
+            assert result["error"]["code"] == "INVALID_ARGUMENT", bad
+            assert result["error"]["dispatch_state"] == "not_dispatched"
+        assert host.transfers == []
         await plugin.close(context)
     asyncio.run(run())
 
