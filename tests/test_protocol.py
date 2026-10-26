@@ -333,6 +333,22 @@ def test_frequency_poll_interval_floor():
     assert proto.FREQ_POLL_INTERVAL_MIN_MS > 75
 
 
+def test_hardware_observed_reply_grammar():
+    """The reply grammar the 2026-10-26 read-only probes showed (record
+    section 10).
+
+    These pin observed wire shape only — the requested count plus a
+    four-byte read header, and a three-byte write ACK. No register value,
+    page bit or status bit is pinned anywhere: every probed address
+    returned zero data, and the status byte is not hardware-decoded.
+    """
+    assert proto.READ_REPLY_HEADER_BYTES == 4
+    assert proto.WRITE_ACK_BYTES == 3
+    # About 119 ms observed per write; the hypothesis that poll loops
+    # must pace at this cadence is recorded in the record, not asserted.
+    assert proto.WRITE_ACK_LATENCY_MS == 119
+
+
 def test_frequency_round_robin_lag_plan():
     # One-iteration lag: select N+1, then read N, over the four channels.
     plan = proto.freq_round_robin(4)

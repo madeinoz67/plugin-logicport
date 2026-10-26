@@ -74,7 +74,10 @@ def test_identify_is_static_no_io():
 
 def test_read_status_hardware_capture():
     async def run():
-        # The §9 device capture: C2 STATUS, four bytes E0 E0 E0 E0.
+        # A constructed fixture, NOT a hardware capture: the 2026-10-12
+        # four-byte E0 read is withdrawn evidence (its tool truncates at
+        # four bytes; record section 10), and the status byte is not
+        # hardware-decoded. The value rehearses the static §5c decode.
         host = MockHost(_register_read(proto.frame_c2(0x0000, 4), b"\xe0\xe0\xe0\xe0"))
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
@@ -523,7 +526,8 @@ def test_vectors_match_protocol_builders():
         cycle.append(proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4).hex())
     assert len(rows) == 2 * len(cycle)
     assert [row["request"] for row in rows] == cycle * 2
-    # The status response is the hardware capture of record section 9; the
+    # Every response is a constructed fixture: the status rows' E0 bytes
+    # are withdrawn hardware evidence (record section 10), and the
     # frequency counts decode to the fixture Hz values (count x 10).
     assert rows[0]["response"] == "e0e0e0e0"
     hz = [int.from_bytes(bytes.fromhex(row["response"]), "big") * 10

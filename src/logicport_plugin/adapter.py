@@ -67,13 +67,19 @@ _INVOKE_ACTIONS = frozenset(
 _STATUS_POLL_MAX_ATTEMPTS = 100
 
 #: Receive bound for the quiet-tolerant write ACK drain (§3.1): the app
-#: drains pending response bytes after each write and checks an ACK whose
-#: exact length the decode did not pin.
+#: The write ACK is exactly three bytes on the observed grammar
+#: (C1, 00, command counter — record section 10, 2026-10-26); the drain
+#: below stays quiet-tolerant because the adapter does not yet parse that
+#: grammar (wire-truth work, parked): the mock rehearses a quiet line and
+#: the recorded exchange lengths stay the static decode's.
 _ACK_DRAIN_MAX_BYTES = 8
 
-#: C2 register reads answer with four bytes in the hardware probe (§8); the
-#: status byte is the first, the trigger position word the first two
-#: (big-endian).
+#: C2 register reads request four bytes; the static decode takes the
+#: status byte as the first reply byte and the trigger position word as
+#: the first two (big-endian). NOT hardware-decoded: the observed reply
+#: runs the requested count plus a four-byte header with zero data at
+#: every probed address (record section 10) — the receive framing is a
+#: hypothesis until a register-data probe lands.
 _REGISTER_READ_BYTES = 4
 
 _FPGA_POLL_TIMEOUT_MS_DEFAULT = 1000
@@ -276,8 +282,10 @@ class Plugin:
     async def _read_status(self, context):
         """C2 read of register 0x100000; the status byte is response byte 0.
 
-        The hardware probe requested N=4 and received four bytes (§8); the
-        status-byte map is §5c.
+        The status-byte map is the static decode of record section 5c —
+        NOT hardware-decoded: the 2026-10-12 four-byte read that seemed to
+        confirm it is withdrawn (its tool truncates; record section 10),
+        and every address the read-only probes tried answered zero data.
         """
         word = proto.wire_address(proto.REG_STATUS)
         await self._send_frame(proto.frame_c2(word, _REGISTER_READ_BYTES), context)
@@ -787,9 +795,11 @@ class Plugin:
     async def _drain_ack(self, context):
         """Drain the post-write ACK bytes (§3.1); quiet is acceptable.
 
-        The ACK's exact length the decode did not pin, so the drain is
-        quiet-tolerant and the bytes are recorded as evidence rather than
-        parsed.
+        The observed ACK is exactly three bytes (C1, 00, command counter —
+        record section 10, 2026-10-26); this drain stays quiet-tolerant
+        and records the byte count as evidence rather than parsing it,
+        because the adapter does not yet parse the observed reply grammar
+        (wire-truth work, parked) and the mock rehearses a quiet line.
         """
         data = await self._receive(context, _ACK_DRAIN_MAX_BYTES, exact_bytes=None)
         if data:

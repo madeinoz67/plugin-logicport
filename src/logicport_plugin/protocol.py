@@ -70,10 +70,13 @@ RESYNC_ATTEMPTS_MAX = 20
 # --- Register map (Protocol §5b) ------------------------------------------
 #
 # The documented register addresses are 24- to 32-bit; the C1/C2 frame
-# carries a 16-bit address field. The one hardware-proven wire mapping is
-# the status register: 0x100000 -> wire word 0x0000 (live probe, §8). The
-# sample-plane addresses below live in one page (0x02000000) whose offsets
-# fit the 16-bit field without collision, so they are encoded low-16 too.
+# carries a 16-bit address field. NO wire mapping is hardware-proven: the
+# 2026-10-26 read-only probes (record section 10) got the same zero-data
+# reply shape at every address tried, so the low-16 decomposition below is
+# consistent with the observed ACK framing and untested against register
+# data. The sample-plane addresses live in one page (0x02000000) whose
+# offsets fit the 16-bit field without collision, so they are encoded
+# low-16 too.
 # Three documented addresses collide on low-16 (0x1000000, 0x2000000,
 # 0x40000000 all reduce to 0x0000) — their wire encoding is NOT decoded,
 # and :func:`wire_address` refuses them rather than guessing a page-bank.
@@ -341,17 +344,20 @@ def sample_mode_byte(clk_state: int, other_state: int) -> int:
 def wire_address(register: int) -> int:
     """Map a documented register address to the 16-bit C1/C2 address word.
 
-    The frame field is 16 bits (§5b); the one hardware-proven mapping is
-    the status register 0x100000 -> 0x0000 (live probe §8), and the only
-    decomposition consistent with distinguishing the 0x100000-page
-    registers is the low 16 bits. The record's page-qualified addresses
-    (status 0x100000, sequencer 0x200000/0x600000, sample 0x02000000,
-    counter 0x40000000, trigger word 0x1000000) therefore encode low-16
-    here. FLAGGED ASSUMPTION: several families collide on low-16 (status
-    0x100000 and counter select 0x40000000 both reduce to 0x0000, and
-    sequencer segments 0 and 1 share every offset word) — the page-bits
-    part of the decomposition is not hardware-proven, and this function
-    is the one place to fix when a live probe pins it.
+    The frame field is 16 bits (§5b). NO mapping here is hardware-proven:
+    the 2026-10-26 read-only probes (record section 10) returned the same
+    zero-data reply shape for every address tried, so the low-16
+    decomposition is consistent with the observed ACK framing and
+    untested against register data — a read-only probe cannot
+    discriminate it, and the discriminating experiment (register write,
+    then read-back) has not been run. The record's page-qualified
+    addresses (status 0x100000, sequencer 0x200000/0x600000, sample
+    0x02000000, counter 0x40000000, trigger word 0x1000000) encode low-16
+    here on that assumption. FLAGGED: several families collide on low-16
+    (status 0x100000 and counter select 0x40000000 both reduce to 0x0000,
+    and sequencer segments 0 and 1 share every offset word); this function
+    is the one place to fix when a register-data probe pins the
+    decomposition.
     """
     if not isinstance(register, int) or isinstance(register, bool) or register < 0:
         raise ValueError("register must be a nonnegative int")
@@ -616,6 +622,29 @@ def trigger_column_compensated(column_count: int, trigger_word: int, pipeline: i
     if not isinstance(pipeline, int) or isinstance(pipeline, bool) or pipeline < 0:
         raise ValueError("pipeline must be a nonnegative int")
     return (trigger_column_raw(column_count, trigger_word) - pipeline)
+
+
+# --- Hardware-observed reply grammar (record section 10, 2026-10-26) -------
+#
+# Read-only probes of the live device (tools/addr_probe.c reads,
+# tools/write_probe.c writes; no register writes). These constants record
+# OBSERVED WIRE SHAPE only: every probed address returned zero data, so no
+# register value, page bit or status bit is confirmed by them. The adapter
+# does not yet parse this grammar — its C2 exchanges still receive n raw
+# bytes per the static decode; adopting the observed shape is future work
+# gated on a register-data probe.
+
+#: A read reply runs the requested count plus this four-byte header:
+#: the C2 echo, a zero byte, a command counter, then the data bytes.
+READ_REPLY_HEADER_BYTES = 4
+#: A write ACK is exactly three bytes: C1, a zero byte, the same command
+#: counter the read replies carry. The ACK-shape open item is closed at
+#: the grammar level; the ACK payload semantics stay open.
+WRITE_ACK_BYTES = 3
+#: One write answered in about 119 ms on the live device. HYPOTHESIS
+#: (record section 10): poll loops pace at this cadence — observed once,
+#: not established as a requirement.
+WRITE_ACK_LATENCY_MS = 119
 
 
 # --- Section 8.1 stream transactions and the FTDI control dialect ---------
