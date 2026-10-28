@@ -97,6 +97,8 @@ PLANE_D24_D31 = 0x02004000
 PLANE_FLAGS = 0x02009000
 
 #: The five plane bases in channel order, flags last.
+#: RETRACTED 2026-10-28: the wire carries no address (see docs addenda 5/6);
+#: kept for history, do not use.
 PLANE_BASES = (PLANE_D0_D7, PLANE_D8_D15, PLANE_D16_D23, PLANE_D24_D31, PLANE_FLAGS)
 
 #: Ping-pong page stride within the sample page. ASSUMPTION (flagged): the
@@ -365,6 +367,9 @@ def sample_mode_byte(clk_state: int, other_state: int) -> int:
 def wire_address(register: int) -> int:
     """Map a documented register address to the 16-bit C1/C2 address word.
 
+    RETRACTED 2026-10-28: the wire carries no address (see docs addenda
+    5/6); kept for history, do not use.
+
     The frame field is 16 bits (§5b). NO mapping here is hardware-proven:
     the 2026-10-26 read-only probes (record section 10) returned the same
     zero-data reply shape for every address tried, so the low-16
@@ -387,6 +392,9 @@ def wire_address(register: int) -> int:
 
 def sample_plane_wire_address(plane: int, page_base: int) -> int:
     """Wire address of one sample-plane chunk (Protocol §6.1).
+
+    RETRACTED 2026-10-28: the wire carries no address (see docs addenda
+    5/6); kept for history, do not use.
 
     ``plane`` indexes PLANE_BASES (0-3 channel data, 4 flags); the page
     base is ``(tp + 1 + prescale) mod 0x400`` (plus PAGE_STRIDE for the
