@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2068" height="661" viewBox="0 0 2068 661" font-family="Helvetica,Arial,sans-serif">
+<rect width="2068" height="661" fill="#ffffff"/>
+<text x="30" y="44" font-size="19" font-weight="bold" fill="#1a1a1a">LogicPort register and address map: decoded from DefineHardwareAddresses, 2026-10-29</text>
+<rect x="30" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="38" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Command bank</text>
+<text x="38" y="127" font-size="10.5" fill="#37587a">segment 0x0010</text>
+<rect x="30" y="146" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="37" y="162" font-size="10" font-weight="bold" fill="#1a1a1a">0x100000</text>
+<text x="148" y="162" font-size="10" fill="#333333">status / phase byte</text>
+<rect x="30" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x100001</text>
+<text x="148" y="187" font-size="10" fill="#333333">auxiliary</text>
+<rect x="30" y="196" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="212" font-size="10" font-weight="normal" fill="#1a1a1a">0x100002</text>
+<text x="148" y="212" font-size="10" fill="#333333">trigger enable / disarm</text>
+<rect x="30" y="221" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="37" y="237" font-size="10" font-weight="bold" fill="#1a1a1a">0x100003</text>
+<text x="148" y="237" font-size="10" fill="#333333">ARM</text>
+<rect x="30" y="246" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="37" y="262" font-size="10" font-weight="bold" fill="#1a1a1a">0x100004</text>
+<text x="148" y="262" font-size="10" fill="#333333">trigger position A</text>
+<rect x="30" y="271" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="287" font-size="10" font-weight="normal" fill="#1a1a1a">0x100005</text>
+<text x="148" y="287" font-size="10" fill="#333333">no known function</text>
+<rect x="30" y="296" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="312" font-size="10" font-weight="normal" fill="#1a1a1a">0x100006</text>
+<text x="148" y="312" font-size="10" fill="#333333">trigger position B</text>
+<rect x="30" y="321" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="37" y="337" font-size="10" font-weight="bold" fill="#1a1a1a">0x100008</text>
+<text x="148" y="337" font-size="10" fill="#333333">threshold DAC</text>
+<rect x="30" y="346" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="362" font-size="10" font-weight="normal" fill="#1a1a1a">0x100009</text>
+<text x="148" y="362" font-size="10" fill="#333333">no known function</text>
+<rect x="30" y="371" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="387" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000A</text>
+<text x="148" y="387" font-size="10" fill="#333333">phase-exit slot 1</text>
+<rect x="30" y="396" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="412" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000B</text>
+<text x="148" y="412" font-size="10" fill="#333333">phase-exit slot 2</text>
+<rect x="30" y="421" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="437" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000C</text>
+<text x="148" y="437" font-size="10" fill="#333333">phase-exit slot 3</text>
+<rect x="30" y="446" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="462" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000D</text>
+<text x="148" y="462" font-size="10" fill="#333333">no known function</text>
+<rect x="30" y="471" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="37" y="487" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000F</text>
+<text x="148" y="487" font-size="10" fill="#333333">no known function</text>
+<rect x="320" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="328" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Mode / mask bank</text>
+<text x="328" y="127" font-size="10.5" fill="#37587a">segment 0x0100</text>
+<rect x="320" y="146" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="327" y="162" font-size="10" font-weight="bold" fill="#1a1a1a">0x1000000</text>
+<text x="438" y="162" font-size="10" fill="#333333">clock / mode byte</text>
+<rect x="320" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="327" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x1000001</text>
+<text x="438" y="187" font-size="10" fill="#333333">auxiliary</text>
+<rect x="320" y="196" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="327" y="212" font-size="10" font-weight="normal" fill="#1a1a1a">0x1000002</text>
+<text x="438" y="212" font-size="10" fill="#333333">trigger enable</text>
+<rect x="320" y="221" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="327" y="237" font-size="10" font-weight="normal" fill="#1a1a1a">0x1000003</text>
+<text x="438" y="237" font-size="10" fill="#333333">sample mask A</text>
+<rect x="320" y="246" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="327" y="262" font-size="10" font-weight="normal" fill="#1a1a1a">0x1000008</text>
+<text x="438" y="262" font-size="10" fill="#333333">sample mask B</text>
+<rect x="610" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="618" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Term slot 0</text>
+<text x="618" y="127" font-size="10.5" fill="#37587a">segment 0x0020</text>
+<rect x="610" y="146" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="162" font-size="10" font-weight="normal" fill="#1a1a1a">0x200000</text>
+<text x="728" y="162" font-size="10" fill="#333333">pattern plane A</text>
+<rect x="610" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x200005</text>
+<text x="728" y="187" font-size="10" fill="#333333">pattern plane B</text>
+<rect x="610" y="196" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="617" y="212" font-size="10" font-weight="bold" fill="#1a1a1a">0x20000A</text>
+<text x="728" y="212" font-size="10" fill="#333333">occurrence count</text>
+<rect x="610" y="221" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="237" font-size="10" font-weight="normal" fill="#1a1a1a">0x20000E</text>
+<text x="728" y="237" font-size="10" fill="#333333">derived dword</text>
+<rect x="610" y="246" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="262" font-size="10" font-weight="normal" fill="#1a1a1a">0x200012</text>
+<text x="728" y="262" font-size="10" fill="#333333">digit mode</text>
+<rect x="610" y="271" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="287" font-size="10" font-weight="normal" fill="#1a1a1a">0x200014</text>
+<text x="728" y="287" font-size="10" fill="#333333">derived flag</text>
+<rect x="610" y="296" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="312" font-size="10" font-weight="normal" fill="#1a1a1a">0x200016</text>
+<text x="728" y="312" font-size="10" fill="#333333">count-mode flag</text>
+<rect x="610" y="321" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="337" font-size="10" font-weight="normal" fill="#1a1a1a">0x200017</text>
+<text x="728" y="337" font-size="10" fill="#333333">count-mode flag</text>
+<rect x="610" y="346" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="362" font-size="10" font-weight="normal" fill="#1a1a1a">0x200018</text>
+<text x="728" y="362" font-size="10" fill="#333333">count-mode flag</text>
+<rect x="610" y="371" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="387" font-size="10" font-weight="normal" fill="#1a1a1a">0x200019</text>
+<text x="728" y="387" font-size="10" fill="#333333">enable byte</text>
+<rect x="610" y="396" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="412" font-size="10" font-weight="normal" fill="#1a1a1a">0x20001A</text>
+<text x="728" y="412" font-size="10" fill="#333333">digit sum</text>
+<rect x="610" y="421" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="437" font-size="10" font-weight="normal" fill="#1a1a1a">0x20001F</text>
+<text x="728" y="437" font-size="10" fill="#333333">string A value</text>
+<rect x="610" y="446" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="617" y="462" font-size="10" font-weight="normal" fill="#1a1a1a">0x200024</text>
+<text x="728" y="462" font-size="10" fill="#333333">string B value</text>
+<rect x="610" y="471" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="617" y="487" font-size="10" font-weight="bold" fill="#1a1a1a">0x200029</text>
+<text x="728" y="487" font-size="10" fill="#333333">EDGE plane A</text>
+<rect x="610" y="496" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="617" y="512" font-size="10" font-weight="bold" fill="#1a1a1a">0x20002E</text>
+<text x="728" y="512" font-size="10" fill="#333333">EDGE plane B</text>
+<rect x="900" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="908" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Term slot 1</text>
+<text x="908" y="127" font-size="10.5" fill="#37587a">segment 0x0040</text>
+<rect x="900" y="146" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="162" font-size="10" font-weight="normal" fill="#1a1a1a">0x400000</text>
+<text x="1018" y="162" font-size="10" fill="#333333">pattern plane A</text>
+<rect x="900" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x400005</text>
+<text x="1018" y="187" font-size="10" fill="#333333">pattern plane B</text>
+<rect x="900" y="196" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="907" y="212" font-size="10" font-weight="bold" fill="#1a1a1a">0x40000A</text>
+<text x="1018" y="212" font-size="10" fill="#333333">occurrence count</text>
+<rect x="900" y="221" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="237" font-size="10" font-weight="normal" fill="#1a1a1a">0x40000E</text>
+<text x="1018" y="237" font-size="10" fill="#333333">derived dword</text>
+<rect x="900" y="246" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="262" font-size="10" font-weight="normal" fill="#1a1a1a">0x400012</text>
+<text x="1018" y="262" font-size="10" fill="#333333">digit mode</text>
+<rect x="900" y="271" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="287" font-size="10" font-weight="normal" fill="#1a1a1a">0x400014</text>
+<text x="1018" y="287" font-size="10" fill="#333333">derived flag</text>
+<rect x="900" y="296" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="312" font-size="10" font-weight="normal" fill="#1a1a1a">0x400016</text>
+<text x="1018" y="312" font-size="10" fill="#333333">count-mode flag</text>
+<rect x="900" y="321" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="337" font-size="10" font-weight="normal" fill="#1a1a1a">0x400017</text>
+<text x="1018" y="337" font-size="10" fill="#333333">count-mode flag</text>
+<rect x="900" y="346" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="362" font-size="10" font-weight="normal" fill="#1a1a1a">0x400018</text>
+<text x="1018" y="362" font-size="10" fill="#333333">count-mode flag</text>
+<rect x="900" y="371" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="387" font-size="10" font-weight="normal" fill="#1a1a1a">0x400019</text>
+<text x="1018" y="387" font-size="10" fill="#333333">enable byte</text>
+<rect x="900" y="396" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="412" font-size="10" font-weight="normal" fill="#1a1a1a">0x40001A</text>
+<text x="1018" y="412" font-size="10" fill="#333333">digit sum</text>
+<rect x="900" y="421" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="437" font-size="10" font-weight="normal" fill="#1a1a1a">0x40001F</text>
+<text x="1018" y="437" font-size="10" fill="#333333">string A value</text>
+<rect x="900" y="446" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="907" y="462" font-size="10" font-weight="normal" fill="#1a1a1a">0x400024</text>
+<text x="1018" y="462" font-size="10" fill="#333333">string B value</text>
+<rect x="900" y="471" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="907" y="487" font-size="10" font-weight="bold" fill="#1a1a1a">0x400029</text>
+<text x="1018" y="487" font-size="10" fill="#333333">EDGE plane A</text>
+<rect x="900" y="496" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="907" y="512" font-size="10" font-weight="bold" fill="#1a1a1a">0x40002E</text>
+<text x="1018" y="512" font-size="10" fill="#333333">EDGE plane B</text>
+<rect x="1190" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1198" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Sample area</text>
+<text x="1198" y="127" font-size="10.5" fill="#37587a">segment 0x0200</text>
+<rect x="1190" y="146" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="1197" y="162" font-size="10" font-weight="bold" fill="#1a1a1a">0x…0000</text>
+<text x="1308" y="162" font-size="10" fill="#333333">cursor A (2 bytes BE)</text>
+<rect x="1190" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x…0100</text>
+<text x="1308" y="187" font-size="10" fill="#333333">cursor B (2 bytes BE)</text>
+<rect x="1190" y="196" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="1197" y="212" font-size="10" font-weight="bold" fill="#1a1a1a">0x…1000</text>
+<text x="1308" y="212" font-size="10" fill="#333333">D0–D7   set A</text>
+<rect x="1190" y="221" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="237" font-size="10" font-weight="normal" fill="#1a1a1a">0x…2000</text>
+<text x="1308" y="237" font-size="10" fill="#333333">D8–D15  set A</text>
+<rect x="1190" y="246" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="262" font-size="10" font-weight="normal" fill="#1a1a1a">0x…3000</text>
+<text x="1308" y="262" font-size="10" fill="#333333">D16–D23 set A</text>
+<rect x="1190" y="271" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="287" font-size="10" font-weight="normal" fill="#1a1a1a">0x…4000</text>
+<text x="1308" y="287" font-size="10" fill="#333333">D24–D31 set A</text>
+<rect x="1190" y="296" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="312" font-size="10" font-weight="normal" fill="#1a1a1a">0x…5000</text>
+<text x="1308" y="312" font-size="10" fill="#333333">D0–D7   set B</text>
+<rect x="1190" y="321" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="337" font-size="10" font-weight="normal" fill="#1a1a1a">0x…6000</text>
+<text x="1308" y="337" font-size="10" fill="#333333">D8–D15  set B</text>
+<rect x="1190" y="346" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="362" font-size="10" font-weight="normal" fill="#1a1a1a">0x…7000</text>
+<text x="1308" y="362" font-size="10" fill="#333333">D16–D23 set B</text>
+<rect x="1190" y="371" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="387" font-size="10" font-weight="normal" fill="#1a1a1a">0x…8000</text>
+<text x="1308" y="387" font-size="10" fill="#333333">D24–D31 set B</text>
+<rect x="1190" y="396" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1197" y="412" font-size="10" font-weight="normal" fill="#1a1a1a">0x…9000</text>
+<text x="1308" y="412" font-size="10" fill="#333333">D32/CLK1 + D33/CLK2</text>
+<rect x="1480" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1488" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Clock bytes</text>
+<text x="1488" y="127" font-size="10.5" fill="#37587a">segment 0x2000</text>
+<rect x="1480" y="146" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="1487" y="162" font-size="10" font-weight="bold" fill="#1a1a1a">0x20000000</text>
+<text x="1598" y="162" font-size="10" fill="#333333">clock byteA</text>
+<rect x="1480" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1487" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x20000001</text>
+<text x="1598" y="187" font-size="10" fill="#333333">clock byteB</text>
+<rect x="1770" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1778" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Freq counter</text>
+<text x="1778" y="127" font-size="10.5" fill="#37587a">segment 0x4000</text>
+<rect x="1770" y="146" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="1777" y="162" font-size="10" font-weight="bold" fill="#1a1a1a">0x40000000</text>
+<text x="1888" y="162" font-size="10" fill="#333333">channel select / marker</text>
+<rect x="1770" y="171" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="1777" y="187" font-size="10" font-weight="bold" fill="#1a1a1a">0x40000001</text>
+<text x="1888" y="187" font-size="10" fill="#333333">count dword</text>
+<rect x="1770" y="196" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
+<text x="1777" y="212" font-size="10" font-weight="normal" fill="#1a1a1a">0x40000005</text>
+<text x="1888" y="212" font-size="10" fill="#333333">status</text>
+<text x="30" y="547" font-size="11" fill="#333333"><tspan font-weight="bold">Addressing.</tspan> A register is reached by a C3 frame carrying the segment = address &gt;&gt; 16, then a C1/C2 frame whose 16-bit field is the low half of the address.</text>
+<text x="30" y="567" font-size="11" fill="#333333"><tspan font-weight="bold">Caching.</tspan> The segment is cached (one C3 covers a run in the same bank). A segment select must be followed by a write before any read.</text>
+<text x="30" y="587" font-size="11" fill="#333333"><tspan font-weight="bold">Widths.</tspan> 1, 2, 4 and 40-bit payloads. The four plane registers are 40-bit: bit k = channel k, 34 channels, top 6 bits zero.</text>
+<text x="30" y="607" font-size="11" fill="#333333"><tspan font-weight="bold">Encodings.</tspan> EDGE is four-state per channel (0 none, 1 plane A, 2 plane B, 3 both). PATTERN is ternary (0 don't care, 1 must-be-0, 2 must-be-1) and never uses 3.</text>
+</svg>

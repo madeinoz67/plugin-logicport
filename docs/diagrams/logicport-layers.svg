@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="942" viewBox="0 0 1560 942" font-family="Helvetica,Arial,sans-serif">
+<rect width="1560" height="942" fill="#ffffff"/>
+<text x="30" y="42" font-size="19" font-weight="bold" fill="#1a1a1a">LogicPort client API layers: what each layer owns</text>
+<text x="30" y="66" font-size="11.5" fill="#555555">Read top down for the call path, bottom up for the evidence. Each layer states what it must not assume, taken from a failure observed on the bench.</text>
+<rect x="30" y="110" width="1500" height="118" rx="4" fill="#e8eef7" stroke="#4a6f9c" stroke-width="1.4"/>
+<text x="46" y="136" font-size="13.5" font-weight="bold" fill="#4a6f9c">6 · CLIENT API</text>
+<text x="46" y="160" font-size="11" fill="#222222">• connect / disconnect</text>
+<text x="786" y="160" font-size="11" fill="#222222">• configure(sample mode, rate, threshold, masks)</text>
+<text x="46" y="178" font-size="11" fill="#222222">• arm(trigger mode, terms)</text>
+<text x="786" y="178" font-size="11" fill="#222222">• poll() -&gt; phase</text>
+<text x="46" y="196" font-size="11" fill="#222222">• fetch() -&gt; per-channel samples</text>
+<text x="46" y="218" font-size="10.5" font-style="italic" fill="#8b2c2c">Caution: Must not assume a capture completed because the call returned; the phase byte decides.</text>
+<rect x="30" y="242" width="1500" height="118" rx="4" fill="#e6f0e6" stroke="#4d804d" stroke-width="1.4"/>
+<text x="46" y="268" font-size="13.5" font-weight="bold" fill="#4d804d">5 · ACQUISITION MODEL</text>
+<text x="46" y="292" font-size="11" fill="#222222">• three phases: pre-fill, trigger, post-fill</text>
+<text x="786" y="292" font-size="11" fill="#222222">• status byte at segment 0x0010 offset 0</text>
+<text x="46" y="310" font-size="11" fill="#222222">• cursor read at 0x0200:0x0000, trigger word at 0x0010:0x000A</text>
+<text x="786" y="310" font-size="11" fill="#222222">• plane reads at planeOffset + cursor, count = 0x800 - start</text>
+<text x="46" y="350" font-size="10.5" font-style="italic" fill="#8b2c2c">Caution: Must not read planes without the cursor, and must not treat status 0x42 as 'not ready': data is fetchable at that status.</text>
+<rect x="30" y="374" width="1500" height="118" rx="4" fill="#fdf1e0" stroke="#a97b32" stroke-width="1.4"/>
+<text x="46" y="400" font-size="13.5" font-weight="bold" fill="#a97b32">4 · REGISTER / SEMANTIC LAYER</text>
+<text x="46" y="424" font-size="11" fill="#222222">• arm 0x100003, threshold 0x100008, positions 0x100004/6</text>
+<text x="786" y="424" font-size="11" fill="#222222">• mode byte 0x1000000, masks 0x1000003/0x1000008</text>
+<text x="46" y="442" font-size="11" fill="#222222">• edge planes 0x200029/0x20002E, pattern 0x200000/0x200005</text>
+<text x="786" y="442" font-size="11" fill="#222222">• count 0x20000A, derived tail 0x200014-0x200019</text>
+<text x="46" y="482" font-size="10.5" font-style="italic" fill="#8b2c2c">Caution: Must not treat the mode/mask bank planes as trigger conditions; the trigger planes live in the term banks.</text>
+<rect x="30" y="506" width="1500" height="118" rx="4" fill="#f0e8f5" stroke="#7a5a96" stroke-width="1.4"/>
+<text x="46" y="532" font-size="13.5" font-weight="bold" fill="#7a5a96">3 · ADDRESSING LAYER</text>
+<text x="46" y="556" font-size="11" fill="#222222">• segment = address &gt;&gt; 16, sent as a C3 frame</text>
+<text x="786" y="556" font-size="11" fill="#222222">• segment cached host-side, skipped when unchanged</text>
+<text x="46" y="574" font-size="11" fill="#222222">• low 16 bits of the address ride the C1/C2 frame</text>
+<text x="786" y="574" font-size="11" fill="#222222">• prime each segment with a write before any read</text>
+<text x="46" y="614" font-size="10.5" font-style="italic" fill="#8b2c2c">Caution: Must not read immediately after a segment select, and must not assume the segment is still selected after an error.</text>
+<rect x="30" y="638" width="1500" height="118" rx="4" fill="#e6eef0" stroke="#3f7080" stroke-width="1.4"/>
+<text x="46" y="664" font-size="13.5" font-weight="bold" fill="#3f7080">2 · FRAME LAYER</text>
+<text x="46" y="688" font-size="11" fill="#222222">• C1 write, C2 read, C3 segment select</text>
+<text x="786" y="688" font-size="11" fill="#222222">• header [op][sel_lo][sel_hi][len_lo][len_hi], len = payload_len - 1</text>
+<text x="46" y="706" font-size="11" fill="#222222">• C1 and C3 drain exactly 3 bytes; C2 returns N + 4</text>
+<text x="786" y="706" font-size="11" fill="#222222">• validate the echo; EE 00 00 means the frame was rejected</text>
+<text x="46" y="746" font-size="10.5" font-style="italic" fill="#8b2c2c">Caution: Must not leave a reply unread, and must not reuse a stale reply for the next command.</text>
+<rect x="30" y="770" width="1500" height="118" rx="4" fill="#f2f2f2" stroke="#666666" stroke-width="1.4"/>
+<text x="46" y="796" font-size="13.5" font-weight="bold" fill="#666666">1 · TRANSPORT</text>
+<text x="46" y="820" font-size="11" fill="#222222">• libftdi bulk transfers; VID 0x0403 PID 0xDC48</text>
+<text x="786" y="820" font-size="11" fill="#222222">• latency timer 4, baud 460800</text>
+<text x="46" y="838" font-size="11" fill="#222222">• FPGA bitstream load after every replug (.ccf transform)</text>
+<text x="786" y="838" font-size="11" fill="#222222">• flush: purge, 65535 x 00, 30000 x 00, one 0x01, purge</text>
+<text x="46" y="878" font-size="10.5" font-style="italic" fill="#8b2c2c">Caution: Must not assume the device survived a bad frame; the LED going dark means a replug, and no command recovers it.</text>
+</svg>
