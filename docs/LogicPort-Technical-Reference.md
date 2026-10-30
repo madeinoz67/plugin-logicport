@@ -24,6 +24,13 @@ loaded with a bitstream before it does anything.
 
 | Property | Value |
 | --- | --- |
+| Sampled channels | 34 |
+| Timing mode sample rate | **1 kHz to 500 MHz**, 1-2-5 sequence |
+| State mode sample rate | **0 to 200 MHz** |
+| Sample buffer | 34 x 2048 samples |
+| Maximum sample compression | 2^33 to 1, at rates up to 200 MHz |
+| Trigger sequencer | 250 MHz maximum, 4 ns minimum pulse width |
+| Trigger event counters | 20 bits, 1 to 1048575 |
 | USB vendor | `0x0403` FTDI |
 | USB product | `0xDC48` |
 | Product string | `LogicPort Logic Analyzer` |
@@ -491,9 +498,9 @@ table, and a client selects the row by sending its two bytes.
 
 | Row | Period | Frequency | Byte A | Byte B |
 | --- | --- | --- | --- | --- |
-| 0 | 1 ns | 1 GHz | `0x00` | `0x00` |
+| 0 | 1 ns | 1 GHz **special DDR path, not offered** | `0x00` | `0x00` |
 | 1 | 2 ns | 500 MHz | `0x00` | `0x00` |
-| 2 | 4 ns | 250 MHz | `0x00` | `0x00` |
+| 2 | 4 ns | 250 MHz **not offered** | `0x00` | `0x00` |
 | 3 | 5 ns | 200 MHz | `0x01` | `0x00` |
 | 4 | 10 ns | 100 MHz | `0x11` | `0x00` |
 | 5 | 20 ns | 50 MHz | `0x11` | `0x11` |
@@ -511,6 +518,13 @@ table, and a client selects the row by sending its two bytes.
 | 17 | 200 us | 5 kHz | `0x51` | `0x11` |
 | 18 | 500 us | 2 kHz | `0x51` | `0x44` |
 | 19 | 1 ms | 1 kHz | `0x61` | `0x00` |
+
+**The usable range is row 1 to row 19**, which is 500 MHz down to 1 kHz and matches
+the vendor specification for timing mode. Row 0 reads 1 GHz because it is a
+special double data rate path that doubles 500 MHz, and its clock source field
+reads 4, which the decode names *not implemented*. The vendor interface never
+offers it, and the specification's ceiling of 500 MHz is the single rate figure. Row 2 at 250 MHz is in the table but absent from
+the interface's list of eighteen rates.
 
 Byte A holds the decade in its high nibble and a coarse step in its low bits.
 Byte B holds the fine step and takes `0x00`, `0x11` or `0x44`. **Use a pair from
@@ -530,7 +544,7 @@ honours them regardless, so a client must send them. `DECODED and MEASURED`.
 ## 7. State mode, the external clock
 
 In state mode the device samples once per edge of an external clock. The sample
-rate is the clock rate. `MEASURED`: a 14 kHz clock produced 13650 Hz sampling
+rate is the clock rate, and the vendor specification caps that at **200 MHz**. `MEASURED`: a 14 kHz clock produced 13650 Hz sampling
 against a known input.
 
 ### Selecting state mode
