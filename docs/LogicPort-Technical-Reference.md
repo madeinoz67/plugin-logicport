@@ -489,28 +489,28 @@ five volt input. `MEASURED`.
 Timing mode samples from an internal divider. The rate is one row of a 20 row
 table, and a client selects the row by sending its two bytes.
 
-| Row | Period | Byte A | Byte B |
-| --- | --- | --- | --- |
-| 0 | 1 ns | `0x00` | `0x00` |
-| 1 | 2 ns | `0x00` | `0x00` |
-| 2 | 4 ns | `0x00` | `0x00` |
-| 3 | 5 ns | `0x01` | `0x00` |
-| 4 | 10 ns | `0x11` | `0x00` |
-| 5 | 20 ns | `0x11` | `0x11` |
-| 6 | 50 ns | `0x11` | `0x44` |
-| 7 | 100 ns | `0x21` | `0x00` |
-| 8 | 200 ns | `0x21` | `0x11` |
-| 9 | 500 ns | `0x21` | `0x44` |
-| 10 | 1 us | `0x31` | `0x00` |
-| 11 | 2 us | `0x31` | `0x11` |
-| 12 | 5 us | `0x31` | `0x44` |
-| 13 | 10 us | `0x41` | `0x00` |
-| 14 | 20 us | `0x41` | `0x11` |
-| 15 | 50 us | `0x41` | `0x44` |
-| 16 | 100 us | `0x51` | `0x00` |
-| 17 | 200 us | `0x51` | `0x11` |
-| 18 | 500 us | `0x51` | `0x44` |
-| 19 | 1 ms | `0x61` | `0x00` |
+| Row | Period | Frequency | Byte A | Byte B |
+| --- | --- | --- | --- | --- |
+| 0 | 1 ns | 1 GHz | `0x00` | `0x00` |
+| 1 | 2 ns | 500 MHz | `0x00` | `0x00` |
+| 2 | 4 ns | 250 MHz | `0x00` | `0x00` |
+| 3 | 5 ns | 200 MHz | `0x01` | `0x00` |
+| 4 | 10 ns | 100 MHz | `0x11` | `0x00` |
+| 5 | 20 ns | 50 MHz | `0x11` | `0x11` |
+| 6 | 50 ns | 20 MHz | `0x11` | `0x44` |
+| 7 | 100 ns | 10 MHz | `0x21` | `0x00` |
+| 8 | 200 ns | 5 MHz | `0x21` | `0x11` |
+| 9 | 500 ns | 2 MHz | `0x21` | `0x44` |
+| 10 | 1 us | 1 MHz | `0x31` | `0x00` |
+| 11 | 2 us | 500 kHz | `0x31` | `0x11` |
+| 12 | 5 us | 200 kHz | `0x31` | `0x44` |
+| 13 | 10 us | 100 kHz | `0x41` | `0x00` |
+| 14 | 20 us | 50 kHz | `0x41` | `0x11` |
+| 15 | 50 us | 20 kHz | `0x41` | `0x44` |
+| 16 | 100 us | 10 kHz | `0x51` | `0x00` |
+| 17 | 200 us | 5 kHz | `0x51` | `0x11` |
+| 18 | 500 us | 2 kHz | `0x51` | `0x44` |
+| 19 | 1 ms | 1 kHz | `0x61` | `0x00` |
 
 Byte A holds the decade in its high nibble and a coarse step in its low bits.
 Byte B holds the fine step and takes `0x00`, `0x11` or `0x44`. **Use a pair from
