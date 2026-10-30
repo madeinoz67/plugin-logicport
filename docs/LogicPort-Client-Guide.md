@@ -168,8 +168,31 @@ def loaded_image(link: Link) -> int:
     return payload_of(link.send(read(0x0010000F, 2)))[0] & 0x0F
 ```
 
-Image 7 reads as index 7. Use image 7 for everything in this guide, because it is
-the image whose trigger works.
+**Read this back after every load, and before every capture.** A load that never
+took leaves the previous index in place, so a capture can look healthy while
+running the wrong image. There are eight images, indexed 0 to 7.
+
+| Index | Load it when | Edge trigger |
+| --- | --- | --- |
+| 7 | you want a triggered capture on the internal clock | **yes** |
+| 6 | the same as 7. Both belong to sample mode 1 | **yes** |
+| 1, 3 | you want to sample on an edge of an external clock on CLK1 | no |
+| 2, 4 | you want to sample on an edge of an external clock on CLK2 | no |
+| 0 | sample mode 2, a timing mode with no established distinct purpose | no |
+| 5 | sample mode 3, a timing mode with no established distinct purpose | no |
+
+Use image 7 for everything in this guide, because it is the image whose trigger
+works.
+
+Two things to know before you vary the image.
+
+**Load one image, never all eight.** The file holds eight alternatives and not
+eight parts of one image. A single stream of the whole body faulted the device.
+
+**To change image, unconfigure first.** A configured device keeps DONE high, so a
+new stream is a no-op. Write `0x00` to register `0x00100000`, confirm DONE drops,
+then run the load.
+
 
 ---
 

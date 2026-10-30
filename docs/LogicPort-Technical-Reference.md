@@ -266,61 +266,116 @@ asserts DONE.
 Stream the image bytes unchanged. The body uses only the byte values `0x04` to
 `0x07`, and a client must not decode or expand them.
 
-### Which image to load
+### The eight images, one entry each
 
-| Sample mode | `clkState` | Image |
-| --- | --- | --- |
-| 2 | n/a | 0 |
-| 3 | n/a | 5 |
-| 1 | n/a | 6, or 7 |
-| 4 | 0, 1, 2, 3 | 1, 3, 2, 4 |
+The file holds **eight** images, indexed 0 to 7. A client loads exactly one. The
+table answers what each is, when to load it, and how to prove it took.
 
-Sample mode 1 is the mode with a working edge trigger. Image 7 is the one used
-for all bench work. `DECODED`.
+Offsets are from the start of the body, which begins at absolute file offset 73.
 
-### Loading procedure
+| Index | Body offset | Length | Selected by | Sampling clock | Edge trigger |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 1057840 | sample mode 2 | internal | no |
+| 1 | 1057840 | 1044512 | sample mode 4, `clkState` 0 | CLK1 | no |
+| 2 | 2102352 | 1046896 | sample mode 4, `clkState` 2 | CLK2 | no |
+| 3 | 3149248 | 1047328 | sample mode 4, `clkState` 1 | CLK1 | no |
+| 4 | 4196576 | 1046512 | sample mode 4, `clkState` 3 | CLK2 | no |
+| 5 | 5243088 | 1054992 | sample mode 3 | internal | no |
+| 6 | 6298080 | 1031232 | sample mode 1 | internal | **yes** |
+| 7 | 7329312 | 1058384 | sample mode 1, when a further flag is set | internal | **yes** |
+
+### What each image is for
+
+| Index | Use it when |
+| --- | --- |
+| 7 | you want a **triggered capture on the internal clock**. This is the image the bench used for all working captures |
+| 6 | the same as 7. Both belong to sample mode 1 and both trigger |
+| 1 | you want to sample on an edge of an external clock on **CLK1** |
+| 3 | the same as 1, for the other edge or source choice of `clkState` 1 |
+| 2 | you want to sample on an edge of an external clock on **CLK2** |
+| 4 | the same as 2, for `clkState` 3 |
+| 0 | sample mode 2, a timing mode. Its distinct purpose was never established |
+| 5 | sample mode 3, a timing mode. Its distinct purpose was never established |
+
+Every image answers commands and fills the buffer. Only 6 and 7 fire the edge
+trigger. `MEASURED`.
+
+### How to load an image
 
 ```
-1  open the device, set baud 3000000 and latency 4 ms
-2  enter bitbang mode with mask 0x07
-3  write byte 0x00
-4  confirm DONE reads low. If it never goes low the device is already
-   configured, and the device ignores the stream
-5  write byte 0x04
-6  confirm INIT goes high within 1000 ms
-7  stream the selected image in 10000 byte chunks
-8  confirm DONE goes high within 1000 ms
-9  leave bitbang mode
+1  open the device, baud 3000000, latency 4 ms
+2  if the device already holds an image, unconfigure it:
+      framed write of 0x00 to register 0x00100000, then confirm DONE is low
+3  enter bitbang mode, mask 0x07
+4  write the byte 0x00
+5  confirm DONE reads low. If it stays high the stream is a no-op, so stop
+6  write the byte 0x04
+7  confirm INIT goes high within 1000 ms
+8  stream the image in 10000 byte chunks, from the body offset in the table
+9  confirm DONE goes high within 1000 ms
+10 leave bitbang mode, then flush and prime eight reads
 ```
 
-A client reaches steps 2 to 8 only when the device holds no bitstream. On a
-device that is already configured, DONE stays high at step 4 and the stream is a
-no-op. **To change image, unconfigure first** with a framed write of `0x00` to
-register `0x00100000`, which drops DONE, then run the procedure.
+Extract the image like this:
 
-### Confirming which image is loaded
+```python
+def image_bytes(ccf_path: str, index: int) -> bytes:
+    raw = open(ccf_path, "rb").read()
+    newline = raw.index(b"\n")
+    lengths = [int(x) ^ 0x916662 for x in raw[:newline].decode().split(",")[:8]]
 
-Read two bytes from register `0x0010000F`. The low byte holds the image index with
-bit 4 set. Index 7 reads `0x17`. This is the only reliable way to know what the
-device holds. `MEASURED`.
+    body = raw[newline + 1:]
+    offset = sum(n * 16 for n in lengths[:index])
+    image = bytearray(body[offset:offset + lengths[index] * 16])
 
-### Measured behaviour of each image
+    # exchange the first two 4096 byte pages, or DONE never asserts
+    image[0:4096], image[4096:8192] = image[4096:8192], image[0:4096]
+    return bytes(image)
+```
 
-| Image | Answers | Pre-fill | Edge trigger |
-| --- | --- | --- | --- |
-| 0 | yes | yes | no |
-| 1 | yes | yes | no |
-| 2 | yes | yes | no |
-| 3 | yes | yes | no |
-| 4 | yes | yes | no |
-| 5 | yes | yes | no |
-| 6 | yes | yes | **yes** |
-| 7 | yes | yes | **yes** |
+### How to validate that the right image took
 
-Every image answers commands and fills the buffer. Only images 6 and 7 fire the
-edge trigger. `MEASURED`.
+Read two bytes from register `0x0010000F`. The low byte holds the image index
+with bit 4 set.
 
----
+| Image | Register reads |
+| --- | --- |
+| 0 | `0x10` |
+| 1 | `0x11` |
+| 2 | `0x12` |
+| 3 | `0x13` |
+| 4 | `0x14` |
+| 5 | `0x15` |
+| 6 | `0x16` |
+| 7 | `0x17` |
+
+**Read this after every load and before every capture.** A load that never took
+leaves the previous index in place, so a capture can look healthy while running
+the wrong image. This is how the eight image behaviour matrix above was built: one
+image per run, with the index read back each time. `MEASURED`.
+
+Two further checks a client can make:
+
+| Check | How |
+| --- | --- |
+| the image is resident | register `0x0010000F` low nibble equals the index |
+| the image runs | a capture completes, or pre-fill progresses past `0x00` |
+
+### What is unknown about the images
+
+| Question | State |
+| --- | --- |
+| which image 6 versus 7 the vendor picks | both trigger. The choice depends on a flag that was never traced |
+| the distinct purpose of image 0 | known to be sample mode 2. The mode name was not recovered |
+| the distinct purpose of image 5 | known to be sample mode 3. The mode name was not recovered |
+| what distinguishes the two images in each clock pair | the decode gives `clkState`, which pairs a source with an edge. Which of the pair is the rising edge was not measured |
+| whether the images differ in rate | no. Three rows of the clock table gave three rates on one image, so rate is set by the clock bytes and not by the image |
+
+### Loading all eight in one stream does not work
+
+Streaming the whole body as one 8387696 byte burst succeeded once and faulted the
+device every time after. **Load one image.** Treat the eight as alternatives and
+not as parts of one image. `MEASURED`.
 
 ## 5. Configuration
 

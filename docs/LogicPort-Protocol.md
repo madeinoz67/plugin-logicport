@@ -454,14 +454,15 @@ Ordered by what unblocks the next capture.
 
 ## Diagrams
 
-Six diagrams live in `docs/diagrams/`. Each has an editable `.drawio` or `.svg`
+Seven diagrams live in `docs/diagrams/`. Each has an editable `.drawio` or `.svg`
 source beside a rendered `.drawio.png` preview.
 
 | Diagram | Shows | Currency |
 | --- | --- | --- |
-| `logicport-register-map` | every register in every bank, with segments and the addressing rule | **current**, 2026-10-29 |
-| `logicport-handshake` | the four frame exchanges, with real byte sequences and the rules that bit the bench | **current**, 2026-10-29 |
-| `logicport-layers` | the client API stack, each layer's responsibilities and the assumption it must not make | **current**, 2026-10-29 |
+| `logicport-bitstream-images` | the bitstream file, the load sequence with the pin checks, image selection, the identity readback and the measured behaviour of all eight images | **current**, 2026-10-30 |
+| `logicport-register-map` | every register in every bank, with segments and the addressing rule | **current**, 2026-10-30: phase exits, tail and image identity corrected |
+| `logicport-handshake` | the four frame exchanges, with real byte sequences and the rules that bit the bench | **current**, 2026-10-30: three byte header, not four |
+| `logicport-layers` | the client API stack, each layer's responsibilities and the assumption it must not make | **current**, 2026-10-30: read reply shape and baud |
 | `logicport-frames` | the C1, C2 and C3 byte layouts side by side | 2026-10-28, still correct on frame shape |
 | `logicport-sequence` | bring-up through the configuration blocks to the capture poll | 2026-10-28, **predates** the segment addressing and the term banks |
 | `logicport-capture-states` | the capture phases and their transitions | 2026-10-28, **predates** the finding that status `0x42` means data is fetchable |
