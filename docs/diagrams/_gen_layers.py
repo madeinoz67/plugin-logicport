@@ -15,10 +15,10 @@ layers = [
   ["segment = address >> 16, sent as a C3 frame", "segment cached host-side, skipped when unchanged", "low 16 bits of the address ride the C1/C2 frame", "prime each segment with a write before any read"],
   "Must not read immediately after a segment select, and must not assume the segment is still selected after an error."),
  ("2 · FRAME LAYER", "#e6eef0", "#3f7080",
-  ["C1 write, C2 read, C3 segment select", "header [op][sel_lo][sel_hi][len_lo][len_hi], len = payload_len - 1", "C1 and C3 drain exactly 3 bytes; C2 returns N + 4", "validate the echo; EE 00 00 means the frame was rejected"],
+  ["C1 write, C2 read, C3 segment select", "header [op][sel_lo][sel_hi][len_lo][len_hi], len = payload_len - 1", "C1 and C3 drain exactly 3 bytes; a C2 returns its length field plus four", "validate the echo; EE 00 00 means the frame was rejected"],
   "Must not leave a reply unread, and must not reuse a stale reply for the next command."),
  ("1 · TRANSPORT", "#f2f2f2", "#666666",
-  ["libftdi bulk transfers; VID 0x0403 PID 0xDC48", "latency timer 4, baud 460800", "FPGA bitstream load after every replug (.ccf transform)", "flush: purge, 65535 x 00, 30000 x 00, one 0x01, purge"],
+  ["libftdi bulk transfers; VID 0x0403 PID 0xDC48", "latency timer 4, baud 3000000", "FPGA bitstream load after every replug (.ccf transform)", "flush: purge, 65535 x 00, 30000 x 00, one 0x01, purge"],
   "Must not assume the device survived a bad frame; the LED going dark means a replug, and no command recovers it."),
 ]
 W=1560

@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1080" viewBox="0 0 1560 1080" font-family="Helvetica,Arial,sans-serif">
+<rect width="1560" height="1080" fill="#ffffff"/>
+<text x="30" y="40" font-size="19" font-weight="bold" fill="#1a1a1a">Bitstream: what loads, how it loads, and how to prove it</text>
+<text x="30" y="62" font-size="11.5" fill="#555555">The device does nothing until a bitstream holds. The file carries eight separate images and a client loads exactly one.</text>
+<rect x="30" y="86" width="740" height="250" rx="5" fill="#eef3fa" stroke="#4a6f9c" stroke-width="1.4"/>
+<text x="46" y="110" font-size="13.5" font-weight="bold" fill="#4a6f9c">1 · The file: LogicPort.CCF</text>
+<text x="46" y="112" font-size="11" fill="#222222" font-weight="normal">First line is ASCII: nine decimals, comma separated.</text>
+<text x="46" y="130" font-size="11" fill="#222222" font-weight="normal">XOR each with 0x916662 to recover its value.</text>
+<text x="46" y="156" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">values 0 to 7   image lengths, in units of 16 bytes</text>
+<text x="46" y="174" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">value 8         XOR checksum of the eight, advisory</text>
+<text x="46" y="200" font-size="11" fill="#222222" font-weight="normal">Body starts after the newline and the eight images tile it exactly.</text>
+<text x="46" y="218" font-size="11" fill="#222222" font-weight="normal">Shipped body is 8387696 bytes.</text>
+<text x="46" y="244" font-size="11" fill="#8b2c2c" font-weight="bold">Exchange the first 4096 bytes with the next 4096, before streaming.</text>
+<text x="46" y="262" font-size="11" fill="#8b2c2c" font-weight="normal">Without that exchange the device never asserts DONE.</text>
+<text x="46" y="288" font-size="11" fill="#222222" font-weight="normal">Stream the bytes unchanged. The body uses only 0x04 to 0x07.</text>
+<text x="46" y="306" font-size="11" fill="#222222" font-weight="normal">Do not decode or expand them.</text>
+<rect x="46" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="132" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="218" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="304" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="390" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="476" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="562" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="648" y="318" width="80" height="12" fill="#9bb4d4" stroke="#4a6f9c"/>
+<rect x="790" y="86" width="740" height="250" rx="5" fill="#e9f3e9" stroke="#4d804d" stroke-width="1.4"/>
+<text x="806" y="110" font-size="13.5" font-weight="bold" fill="#4d804d">2 · The load sequence, with the pins it checks</text>
+<text x="806" y="122" font-size="11" fill="#222222" font-weight="normal">1. open the device, baud 3000000, latency 4 ms</text>
+<text x="806" y="142" font-size="11" fill="#222222" font-weight="normal">2. enter bitbang mode, mask 0x07</text>
+<text x="806" y="162" font-size="11" fill="#222222" font-weight="normal">3. write 0x00</text>
+<text x="1090" y="162" font-size="10.5" fill="#4d804d" font-weight="italic">DONE must drop to low</text>
+<text x="806" y="182" font-size="11" fill="#222222" font-weight="normal">4. write 0x04</text>
+<text x="1090" y="182" font-size="10.5" fill="#4d804d" font-weight="italic">INIT must go high within 1000 ms</text>
+<text x="806" y="202" font-size="11" fill="#222222" font-weight="normal">5. stream the image in 10000 byte chunks</text>
+<text x="806" y="222" font-size="11" fill="#222222" font-weight="normal">6. wait for DONE</text>
+<text x="1090" y="222" font-size="10.5" fill="#4d804d" font-weight="italic">DONE must go high within 1000 ms</text>
+<text x="806" y="242" font-size="11" fill="#222222" font-weight="normal">7. leave bitbang mode, then flush and prime</text>
+<text x="806" y="270" font-size="11" fill="#8b2c2c" font-weight="normal">If DONE stays high at step 3, the device already holds an image</text>
+<text x="806" y="288" font-size="11" fill="#8b2c2c" font-weight="normal">and the stream is a no-op. Unconfigure first: write 0x00 to</text>
+<text x="806" y="306" font-size="11" fill="#8b2c2c" font-weight="normal">register 0x00100000, confirm DONE drops, then load.</text>
+<text x="806" y="332" font-size="11" fill="#8b2c2c" font-weight="bold">Never write 0x61 to that register. It faults the device.</text>
+<rect x="30" y="352" width="740" height="190" rx="5" fill="#fdf4e8" stroke="#a97b32" stroke-width="1.4"/>
+<text x="46" y="376" font-size="13.5" font-weight="bold" fill="#a97b32">3 · Which image to load</text>
+<text x="46" y="380" font-size="11" fill="#8b2c2c" font-weight="bold">Sample mode 1 is the mode whose edge trigger works.</text>
+<text x="46" y="404" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">sample mode     </text>
+<text x="210" y="404" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">clkState          </text>
+<text x="400" y="404" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">image</text>
+<text x="46" y="424" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">2               </text>
+<text x="210" y="424" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">not applicable    </text>
+<text x="400" y="424" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">0</text>
+<text x="46" y="444" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">3               </text>
+<text x="210" y="444" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">not applicable    </text>
+<text x="400" y="444" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">5</text>
+<text x="46" y="464" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">1               </text>
+<text x="210" y="464" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">not applicable    </text>
+<text x="400" y="464" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">6, or 7</text>
+<text x="46" y="484" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">4               </text>
+<text x="210" y="484" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">0, 1, 2, 3        </text>
+<text x="400" y="484" font-size="11" fill="#333333" font-weight="normal" font-family="Menlo,monospace">1, 3, 2, 4</text>
+<text x="46" y="516" font-size="11" fill="#222222" font-weight="normal">Images 1 and 3 sample on CLK1. Images 2 and 4 sample on CLK2.</text>
+<text x="46" y="534" font-size="11" fill="#222222" font-weight="normal">The sample position setting selects the image family, not a register.</text>
+<rect x="790" y="352" width="740" height="190" rx="5" fill="#f4ecf7" stroke="#7a5a96" stroke-width="1.4"/>
+<text x="806" y="376" font-size="13.5" font-weight="bold" fill="#7a5a96">4 · Proving which image is resident</text>
+<text x="806" y="380" font-size="11" fill="#222222" font-weight="normal">Read two bytes from register 0x0010000F.</text>
+<text x="806" y="400" font-size="11" fill="#222222" font-weight="normal">The low byte holds the image index with bit 4 set.</text>
+<text x="806" y="420" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">Index 7 reads 0x17.  Index 0 reads 0x10.</text>
+<text x="806" y="446" font-size="11" fill="#8b2c2c" font-weight="bold">This is the only reliable way to know what the device holds.</text>
+<text x="806" y="466" font-size="11" fill="#222222" font-weight="normal">A load that never took leaves the previous index in place, so</text>
+<text x="806" y="484" font-size="11" fill="#222222" font-weight="normal">read this before trusting any capture that follows.</text>
+<text x="806" y="510" font-size="11" fill="#222222" font-weight="normal">The register is read only. Nothing writes it.</text>
+<rect x="30" y="558" width="1500" height="210" rx="5" fill="#f2f2f2" stroke="#666666" stroke-width="1.4"/>
+<text x="46" y="582" font-size="13.5" font-weight="bold" fill="#666666">5 · What each image does, measured</text>
+<text x="46" y="586" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">image</text>
+<text x="200" y="586" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">answers</text>
+<text x="340" y="586" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">pre-fill</text>
+<text x="480" y="586" font-size="11" fill="#333333" font-weight="bold" font-family="Menlo,monospace">edge trigger</text>
+<text x="46" y="606" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">0</text>
+<text x="200" y="606" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="606" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="606" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">no</text>
+<text x="46" y="626" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">1</text>
+<text x="200" y="626" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="626" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="626" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">no</text>
+<text x="46" y="646" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">2</text>
+<text x="200" y="646" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="646" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="646" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">no</text>
+<text x="46" y="666" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">3</text>
+<text x="200" y="666" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="666" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="666" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">no</text>
+<text x="46" y="686" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">4</text>
+<text x="200" y="686" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="686" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="686" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">no</text>
+<text x="46" y="706" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">5</text>
+<text x="200" y="706" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="706" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="706" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">no</text>
+<text x="46" y="726" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">6</text>
+<text x="200" y="726" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="726" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="726" font-size="11" fill="#8b2c2c" font-weight="bold" font-family="Menlo,monospace">TRIGGERS</text>
+<text x="46" y="746" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">7</text>
+<text x="200" y="746" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="340" y="746" font-size="11" fill="#222222" font-weight="normal" font-family="Menlo,monospace">yes</text>
+<text x="480" y="746" font-size="11" fill="#8b2c2c" font-weight="bold" font-family="Menlo,monospace">TRIGGERS</text>
+<text x="700" y="606" font-size="11" fill="#222222" font-weight="normal">Every image answers commands and fills the buffer.</text>
+<text x="700" y="626" font-size="11" fill="#8b2c2c" font-weight="bold">Only images 6 and 7 fire the edge trigger.</text>
+<text x="700" y="646" font-size="11" fill="#222222" font-weight="normal">Images 6 and 7 both belong to sample mode 1, so a client</text>
+<text x="700" y="664" font-size="11" fill="#222222" font-weight="normal">that needs a triggered capture selects that mode.</text>
+<text x="700" y="692" font-size="10.5" fill="#666666" font-weight="italic">Measured with a working client, one image per run,</text>
+<text x="700" y="708" font-size="10.5" fill="#666666" font-weight="italic">and the resident index read back each time.</text>
+<rect x="30" y="786" width="1500" height="120" rx="5" fill="#fdf0f0" stroke="#8b2c2c" stroke-width="1.4"/>
+<text x="46" y="810" font-size="13.5" font-weight="bold" fill="#8b2c2c">6 · Two rules that cost the bench the most time</text>
+<text x="46" y="814" font-size="11.5" fill="#8b2c2c" font-weight="bold">The LED reports health, not configuration.</text>
+<text x="46" y="834" font-size="11" fill="#222222" font-weight="normal">A healthy device with no bitstream shows the LED lit. A dark LED means a write faulted it, and only a replug clears it.</text>
+<text x="46" y="860" font-size="11.5" fill="#8b2c2c" font-weight="bold">Never write 0x61 to register 0x00100000.</text>
+<text x="46" y="880" font-size="11" fill="#222222" font-weight="normal">That one write is the measured cause of the fault state. A client has no reason to send it.</text>
+</svg>

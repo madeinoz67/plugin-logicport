@@ -27,7 +27,7 @@ blocks=[
  ]),
  ("3: REGISTER READ (C2)", "request N, receive N + 4", "#1f4e79", [
    (XH,XD,"HOST → DEV","C2 00 00 01 00   request 1 payload byte", "#33475b","a",False),
-   (XD,XH,"DEVICE → HOST","C2 00 03 00 42   4-byte header, then payload", "#b45309","r",False),
+   (XD,XH,"DEVICE → HOST","C2 00 03 00 00 00 00   3-byte header, then the payload", "#b45309","r",False),
  ]),
  ("4: INVALID FRAME", "the command layer rejects and says so", "#8b2c2c", [
    (XH,XD,"HOST → DEV","99 00 00 00 00 61   bad opcode", "#8b2c2c","a",False),
@@ -61,7 +61,7 @@ yb=H-170
 s.append(f'<rect x="34" y="{yb}" width="{W-68}" height="146" rx="4" fill="#f7f7f7" stroke="#cccccc"/>')
 s.append(f'<text x="50" y="{yb+24}" font-size="13" font-weight="bold" fill="#1a1a1a">Rules that bit the bench, all learned on hardware</text>')
 for i,r in enumerate([
- "Drain exactly 3 bytes after every C1 and C3. A C2 returns N + 4. A reply left unread desynchronises everything after it.",
+ "Drain exactly 3 bytes after every C1 and C3. A C2 returns its length field plus four bytes: three overhead, then the payload. A reply left unread desynchronises everything after it.",
  "The segment select is cached host-side and skipped when unchanged, so one C3 covers a run of accesses in the same bank.",
  "A segment select must be followed by a WRITE before any read. That frame order decided two device deaths, each costing a replug.",
  "A C3 with a non-zero segment wedged the device when followed by reads alone; with a write first it survived four segment changes.",

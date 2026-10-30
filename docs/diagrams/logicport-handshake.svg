@@ -37,8 +37,8 @@
 <text x="840" y="550" font-size="11" font-family="Menlo,monospace" text-anchor="middle" fill="#1a1a1a">C2 00 00 01 00   request 1 payload byte</text>
 <line x1="1210" y1="618" x2="470" y2="618" stroke="#b45309" stroke-width="1.6" marker-end="url(#r)"/>
 <text x="34" y="622" font-size="11.5" font-weight="bold" fill="#b45309">DEVICE → HOST</text>
-<rect x="691.2" y="592" width="297.6" height="20" fill="#ffffff" stroke="#e0e0e0"/>
-<text x="840" y="606" font-size="11" font-family="Menlo,monospace" text-anchor="middle" fill="#1a1a1a">C2 00 03 00 42   4-byte header, then payload</text>
+<rect x="659.2" y="592" width="361.6" height="20" fill="#ffffff" stroke="#e0e0e0"/>
+<text x="840" y="606" font-size="11" font-family="Menlo,monospace" text-anchor="middle" fill="#1a1a1a">C2 00 03 00 00 00 00   3-byte header, then the payload</text>
 <text x="34" y="684" font-size="13.5" font-weight="bold" fill="#8b2c2c">4: INVALID FRAME</text>
 <text x="34" y="702" font-size="11" fill="#666666">the command layer rejects and says so</text>
 <line x1="470" y1="730" x2="1210" y2="730" stroke="#8b2c2c" stroke-width="1.6" marker-end="url(#a)"/>
@@ -51,7 +51,7 @@
 <text x="840" y="774" font-size="11" font-family="Menlo,monospace" text-anchor="middle" fill="#1a1a1a">EE 00 00   structured error reply</text>
 <rect x="34" y="946" width="1432" height="146" rx="4" fill="#f7f7f7" stroke="#cccccc"/>
 <text x="50" y="970" font-size="13" font-weight="bold" fill="#1a1a1a">Rules that bit the bench, all learned on hardware</text>
-<text x="56" y="994" font-size="11" fill="#333333">•  Drain exactly 3 bytes after every C1 and C3. A C2 returns N + 4. A reply left unread desynchronises everything after it.</text>
+<text x="56" y="994" font-size="11" fill="#333333">•  Drain exactly 3 bytes after every C1 and C3. A C2 returns its length field plus four bytes: three overhead, then the payload. A reply left unread desynchronises everything after it.</text>
 <text x="56" y="1014" font-size="11" fill="#333333">•  The segment select is cached host-side and skipped when unchanged, so one C3 covers a run of accesses in the same bank.</text>
 <text x="56" y="1034" font-size="11" fill="#333333">•  A segment select must be followed by a WRITE before any read. That frame order decided two device deaths, each costing a replug.</text>
 <text x="56" y="1054" font-size="11" fill="#333333">•  A C3 with a non-zero segment wedged the device when followed by reads alone; with a write first it survived four segment changes.</text>

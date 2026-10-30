@@ -9,7 +9,7 @@
 <text x="148" y="162" font-size="10" fill="#333333">status / phase byte</text>
 <rect x="30" y="171" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
 <text x="37" y="187" font-size="10" font-weight="normal" fill="#1a1a1a">0x100001</text>
-<text x="148" y="187" font-size="10" fill="#333333">auxiliary</text>
+<text x="148" y="187" font-size="10" fill="#333333">no known function</text>
 <rect x="30" y="196" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
 <text x="37" y="212" font-size="10" font-weight="normal" fill="#1a1a1a">0x100002</text>
 <text x="148" y="212" font-size="10" fill="#333333">trigger enable / disarm</text>
@@ -31,21 +31,21 @@
 <rect x="30" y="346" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
 <text x="37" y="362" font-size="10" font-weight="normal" fill="#1a1a1a">0x100009</text>
 <text x="148" y="362" font-size="10" fill="#333333">no known function</text>
-<rect x="30" y="371" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
-<text x="37" y="387" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000A</text>
-<text x="148" y="387" font-size="10" fill="#333333">phase-exit slot 1</text>
+<rect x="30" y="371" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="37" y="387" font-size="10" font-weight="bold" fill="#1a1a1a">0x10000A</text>
+<text x="148" y="387" font-size="10" fill="#333333">phase exit: complete the capture</text>
 <rect x="30" y="396" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
 <text x="37" y="412" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000B</text>
-<text x="148" y="412" font-size="10" fill="#333333">phase-exit slot 2</text>
+<text x="148" y="412" font-size="10" fill="#333333">phase exit: post-fill</text>
 <rect x="30" y="421" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
 <text x="37" y="437" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000C</text>
-<text x="148" y="437" font-size="10" fill="#333333">phase-exit slot 3</text>
+<text x="148" y="437" font-size="10" fill="#333333">phase exit: force trigger</text>
 <rect x="30" y="446" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
 <text x="37" y="462" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000D</text>
-<text x="148" y="462" font-size="10" fill="#333333">no known function</text>
-<rect x="30" y="471" width="268" height="24" fill="#ffffff" stroke="#cccccc" stroke-width="0.8"/>
-<text x="37" y="487" font-size="10" font-weight="normal" fill="#1a1a1a">0x10000F</text>
-<text x="148" y="487" font-size="10" fill="#333333">no known function</text>
+<text x="148" y="462" font-size="10" fill="#333333">tail frame, write zero</text>
+<rect x="30" y="471" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
+<text x="37" y="487" font-size="10" font-weight="bold" fill="#1a1a1a">0x10000F</text>
+<text x="148" y="487" font-size="10" fill="#333333">loaded image identity</text>
 <rect x="320" y="92" width="268" height="44" rx="2" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="328" y="110" font-size="12.5" font-weight="bold" fill="#12385e">Mode / mask bank</text>
 <text x="328" y="127" font-size="10.5" fill="#37587a">segment 0x0100</text>
@@ -210,7 +210,7 @@
 <text x="1778" y="127" font-size="10.5" fill="#37587a">segment 0x4000</text>
 <rect x="1770" y="146" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
 <text x="1777" y="162" font-size="10" font-weight="bold" fill="#1a1a1a">0x40000000</text>
-<text x="1888" y="162" font-size="10" fill="#333333">channel select / marker</text>
+<text x="1888" y="162" font-size="10" fill="#333333">channel select</text>
 <rect x="1770" y="171" width="268" height="24" fill="#ffe6cc" stroke="#d79b00" stroke-width="0.8"/>
 <text x="1777" y="187" font-size="10" font-weight="bold" fill="#1a1a1a">0x40000001</text>
 <text x="1888" y="187" font-size="10" fill="#333333">count dword</text>

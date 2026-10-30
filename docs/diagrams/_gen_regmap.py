@@ -2,13 +2,13 @@
 """Generate the LogicPort register/address map as SVG + drawio from one model."""
 banks = [
  ("Command bank", "segment 0x0010", [
-   ("0x100000","status / phase byte",1),("0x100001","auxiliary",0),
+   ("0x100000","status / phase byte",1),("0x100001","no known function",0),
    ("0x100002","trigger enable / disarm",0),("0x100003","ARM",1),
    ("0x100004","trigger position A",1),("0x100005","no known function",0),
    ("0x100006","trigger position B",0),("0x100008","threshold DAC",1),
-   ("0x100009","no known function",0),("0x10000A","phase-exit slot 1",0),
-   ("0x10000B","phase-exit slot 2",0),("0x10000C","phase-exit slot 3",0),
-   ("0x10000D","no known function",0),("0x10000F","no known function",0)]),
+   ("0x100009","no known function",0),("0x10000A","phase exit: complete the capture",1),
+   ("0x10000B","phase exit: post-fill",0),("0x10000C","phase exit: force trigger",0),
+   ("0x10000D","tail frame, write zero",0),("0x10000F","loaded image identity",1)]),
  ("Mode / mask bank", "segment 0x0100", [
    ("0x1000000","clock / mode byte",1),("0x1000001","auxiliary",0),
    ("0x1000002","trigger enable",0),("0x1000003","sample mask A",0),
@@ -41,7 +41,7 @@ banks = [
  ("Clock bytes", "segment 0x2000", [
    ("0x20000000","clock byteA",1),("0x20000001","clock byteB",0)]),
  ("Freq counter", "segment 0x4000", [
-   ("0x40000000","channel select / marker",1),("0x40000001","count dword",1),
+   ("0x40000000","channel select",1),("0x40000001","count dword",1),
    ("0x40000005","status",0)]),
 ]
 TITLE = "LogicPort register and address map: decoded from DefineHardwareAddresses, 2026-10-29"
