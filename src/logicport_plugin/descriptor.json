@@ -634,7 +634,7 @@
     {
       "id": "urn:logicport:profile:1.0.0",
       "path": "logicport-profile.json",
-      "sha256": "26127c072762340d932e33f0855e37759a2d417a04132815e739247f6e94d0fd"
+      "sha256": "8aec903922f4dc13eccd08e2d3fa0b0a6ac2ae820029c7ad818eede6cf44a77c"
     },
     {
       "id": "urn:otdp:measurement:0.2.4",

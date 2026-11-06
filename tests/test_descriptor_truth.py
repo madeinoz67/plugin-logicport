@@ -213,3 +213,45 @@ def test_measure_channel_parameters_exist():
     for row in descriptor.get("channels", []):
         for name in row.get("parameter_names", []):
             assert name in parameters, f"channel {row['id']} names undeclared parameter {name!r}"
+
+
+def test_pinned_profile_conforms_to_the_catalog_schema():
+    """The pinned profile document validates against the vendored catalog schema.
+
+    A gate that has never disagreed with the bytes it ships is not evidence
+    about them. Until 2026-11-06 this document was a single-profile artefact
+    pinned as a contract, and it failed ``device-profile-catalog.schema.json``
+    with 21 errors: missing ``catalog_version`` and ``profiles``, forbidden
+    ``description``/``profile_id``/``title`` at the root, and every action row
+    missing ``output_schema`` and ``lifecycle`` while carrying ``output_summary``.
+    Nothing validated it, so the drift was invisible for weeks. The gateway
+    resolves every ``contracts`` row against this schema and refuses the load
+    with ``contract_schema:``, so this is a bring-up blocker, not cosmetics.
+    """
+    import pathlib
+
+    import benchweave_sdk
+    from jsonschema import Draft202012Validator
+
+    descriptor = _descriptor()
+    schema_path = (
+        pathlib.Path(benchweave_sdk.__file__).parent
+        / "standards" / "otdp" / descriptor["otdp_version"]
+        / "device-profile-catalog.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    for row in descriptor["contracts"]:
+        document = json.loads(_package_bytes(row["path"]))
+        # The measurement schema is exempted by shape, exactly as the gateway
+        # exempts it: an otdp:measurement $id carrying $defs.dataset.
+        if (str(document.get("$id", "")).startswith("urn:otdp:measurement:")
+                and "dataset" in (document.get("$defs") or {})):
+            continue
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(document),
+            key=lambda error: list(error.path),
+        )
+        assert not errors, (
+            f"{row['path']} does not conform to the catalog schema: "
+            + "; ".join(f"{list(e.path)}: {e.message}" for e in errors[:5])
+        )

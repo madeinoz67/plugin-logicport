@@ -1,8 +1,24 @@
 {
-  "profile_id": "intronix.logicport/1.0.0",
-  "title": "Intronix LogicPort adapter actions",
-  "description": "Plugin-authored action profile for the LogicPort adapter. The actions are adapter-bound operations over the reverse-engineered protocol; they are not an OTDP device-class contract. Operations whose protocol destinations are open items refuse loudly with UNSUPPORTED rather than guessing a register.",
+  "catalog_version": "0.2.4",
   "otdp_version": "0.2.4",
+  "profiles": [
+    {
+      "id": "intronix.logicport/1.0.0",
+      "title": "Intronix LogicPort adapter actions",
+      "channel_roles": [
+        "digital_input"
+      ],
+      "required_actions": [
+        "configure_fpga",
+        "read_counter",
+        "read_samples",
+        "resync",
+        "set_trigger",
+        "stop"
+      ],
+      "optional_actions": []
+    }
+  ],
   "actions": {
     "configure_fpga": {
       "description": "Load the FPGA bitstream from a LogicPort.ccf file through the FTDI bit-bang sequence (LogicPort-Protocol.md section 5; hardware-proven slot 0). The .ccf path comes from the action input or the LOGICPORT_CCF environment variable; the SHA-256 must be the hardware-proven digest.",
@@ -29,8 +45,43 @@
         },
         "additionalProperties": false
       },
-      "output_summary": "slot, offset, length, bitstream_bytes, digest_verified, checksum_ok, pages_swapped, init_asserted, done, rate_command_resent, attempts",
-      "side_effect": "state_change"
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "slot": {
+            "type": "string"
+          },
+          "offset": {},
+          "length": {},
+          "bitstream_bytes": {},
+          "digest_verified": {},
+          "checksum_ok": {},
+          "pages_swapped": {},
+          "init_asserted": {},
+          "done": {
+            "type": "boolean"
+          },
+          "rate_command_resent": {},
+          "attempts": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slot",
+          "offset",
+          "length",
+          "bitstream_bytes",
+          "digest_verified",
+          "checksum_ok",
+          "pages_swapped",
+          "init_asserted",
+          "done",
+          "rate_command_resent",
+          "attempts"
+        ]
+      },
+      "side_effect": "state_change",
+      "lifecycle": "direct"
     },
     "set_trigger": {
       "description": "Send the two 34-bit trigger masks as usbWrite40 C1 frames (LogicPort-Protocol.md section 5a). REFUSES with UNSUPPORTED while the mask destination registers are open items.",
@@ -54,8 +105,27 @@
         ],
         "additionalProperties": false
       },
-      "output_summary": "mask_a, mask_b, frames_sent",
-      "side_effect": "state_change"
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "mask_a": {
+            "type": "integer"
+          },
+          "mask_b": {
+            "type": "integer"
+          },
+          "frames_sent": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mask_a",
+          "mask_b",
+          "frames_sent"
+        ]
+      },
+      "side_effect": "state_change",
+      "lifecycle": "direct"
     },
     "stop": {
       "description": "Send the C3 stop frame with the cached rate word (LogicPort-Protocol.md section 3.3).",
@@ -64,8 +134,21 @@
         "properties": {},
         "additionalProperties": false
       },
-      "output_summary": "acknowledged, rate_word",
-      "side_effect": "state_change"
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "acknowledged": {
+            "type": "boolean"
+          },
+          "rate_word": {}
+        },
+        "required": [
+          "acknowledged",
+          "rate_word"
+        ]
+      },
+      "side_effect": "state_change",
+      "lifecycle": "direct"
     },
     "resync": {
       "description": "The section 3.4 resync flush: re-init, purges, 65535 and 30000 zero bytes, the 0x01 marker, purges. Up to 20 attempts.",
@@ -80,8 +163,23 @@
         },
         "additionalProperties": false
       },
-      "output_summary": "attempts, marker_sent",
-      "side_effect": "state_change"
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "marker_sent": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attempts",
+          "marker_sent"
+        ]
+      },
+      "side_effect": "state_change",
+      "lifecycle": "direct"
     },
     "read_samples": {
       "description": "Read the trigger-position word, then ten sample-plane chunks (five planes, two ping-pong pages), de-interleave and RLE-decode per LogicPort-Protocol.md section 6. Returns packed 34-bit column states, run counts and the total sample count.",
@@ -108,8 +206,51 @@
         ],
         "additionalProperties": false
       },
-      "output_summary": "column_count, page_base, trigger_position, columns, runs, total_samples, trigger_column (when trigger_word given)",
-      "side_effect": "none"
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "column_count": {
+            "type": "integer"
+          },
+          "page_base": {
+            "type": "integer"
+          },
+          "trigger_position": {
+            "type": "integer"
+          },
+          "columns": {
+            "type": "integer"
+          },
+          "runs": {
+            "type": "integer"
+          },
+          "total_samples": {
+            "type": "integer"
+          },
+          "trigger_column": {
+            "type": "object",
+            "properties": {
+              "when trigger_word given": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "when trigger_word given"
+            ]
+          }
+        },
+        "required": [
+          "column_count",
+          "page_base",
+          "trigger_position",
+          "columns",
+          "runs",
+          "total_samples",
+          "trigger_column"
+        ]
+      },
+      "side_effect": "none",
+      "lifecycle": "acquisition"
     },
     "read_counter": {
       "description": "The frequency-counter read as a typed action: one locked sweep of all four counter channels (the device's own round-robin unit), the same poll-floored select/gate/count sequences as the read frequency_a..d parameters, in the shape the execution contract sanctions for a state-changing read (a core read verb declaring state_change is excluded from procedures; a bench admits this action through its per-device allow rule). Selecting channels is a device state change, so the action declares side_effect state_change.",
@@ -118,8 +259,35 @@
         "properties": {},
         "additionalProperties": false
       },
-      "output_summary": "frequencies_hz (a, b, c, d), unit, quality, source",
-      "side_effect": "state_change"
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "frequencies_hz (a": {},
+          "b": {},
+          "c": {},
+          "d)": {},
+          "unit": {
+            "type": "string"
+          },
+          "quality": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "frequencies_hz",
+          "b",
+          "c",
+          "d)",
+          "unit",
+          "quality",
+          "source"
+        ]
+      },
+      "side_effect": "state_change",
+      "lifecycle": "direct"
     }
   }
 }
