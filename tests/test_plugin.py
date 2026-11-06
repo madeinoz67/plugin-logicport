@@ -356,19 +356,41 @@ def test_write_threshold_rejects_out_of_range():
     asyncio.run(run())
 
 
-def test_write_rate_refuses_open_payload():
+def test_write_rate_sends_the_clock_bank_row():
+    """The rate is the clock bank's row bytes (TR rate table): select page
+    0x2000, byte A at 0x0000, byte B at 0x0001, each ACKed. A 2.5 kHz
+    request selects row 18 (2000 Hz, bytes 0x51/0x44) - the row the bench's
+    working chain writes."""
     async def run():
-        host = MockHost([])
+        host = MockHost(
+            [
+                _exchange(proto.ftdi_purge("rx"), {}),
+                _exchange(proto.stream_send(bytes([0xC3, 0x00, 0x20, 0x00, 0x00])), {}),
+                _exchange(proto.stream_receive(3, 3), {"data": b"\xc3\x00\x5a"}),
+                *_frame_send(
+                    proto.frame_c1(0x0000, proto.payload_byte(0x51))
+                ),
+                _exact_ack(0x5B),
+                *_frame_send(
+                    proto.frame_c1(0x0001, proto.payload_byte(0x44))
+                ),
+                _exact_ack(0x5C),
+            ]
+        )
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
         await plugin.open(_descriptor(), host, context)
-        request = _request("write", {"parameter": "rate_word", "value": 0x1234})
+        request = _request("write", {"parameter": "rate_hz", "value": 2500})
         result = await plugin.execute(request, context)
         validate_result(result, request)
-        assert result["status"] == "error"
-        assert result["error"]["code"] == "UNSUPPORTED"
-        assert result["error"]["dispatch_state"] == "not_dispatched"
-        assert host.transfers == []
+        assert result["status"] == "ok", result
+        data = result["data"]
+        # x- rows carry the decode facts (the write receipt allows only
+        # parameter/values + x- extensions).
+        assert data["x-logicport-row"] == 18
+        assert data["x-logicport-clock-bytes"] == [0x51, 0x44]
+        assert data["effective_value"] == 2000.0
+        host.assert_complete()
         await plugin.close(context)
     asyncio.run(run())
 

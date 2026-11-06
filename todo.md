@@ -17,5 +17,9 @@
 - [x] Trigger-mask slots pinned from the proven chain (0x01000003/0x01000008,
       seg 0x0100); set_trigger un-refused through the selecting priming
       write; suite 138/2, check exit 0
+- [x] Rate decode: packed-word model RETIRED; rate_hz parameter selects a
+      row of the 20-row clock table (TR) and writes bytes A/B to the clock
+      bank via select-and-prime; descriptor + all pins repinned; suite
+      138/2, check/check-ui/verify-ui all 0
 - [ ] When PR-7 lands: re-run the recorder against it (no plugin change
       needed if purge semantics hold); then Phase 3 vectors rebuild

@@ -25,3 +25,6 @@
 
 - [x] set_trigger decoded: mask A/B destinations pinned from full_load.c's
       proven chain; the writes now select-and-prime segment 0x0100
+
+- [x] Rate decoded: the rate is the clock bank's two row bytes (TR rate
+      table), not a packed word; rate_hz parameter lands in the descriptor

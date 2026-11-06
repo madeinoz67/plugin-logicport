@@ -169,6 +169,60 @@ RATE_COMMAND_PAYLOAD: int | None = None
 #: R10): one assignment pins the decode once a probe observes meaning.
 AUX_SEMANTICS: int | None = None
 
+
+# --- Clock bank and the rate table (Technical Reference §3 "Clock bank",
+# --- "the rate is one row of a 20 row table") ------------------------------
+
+REG_CLOCK_A = 0x20000000  # write 1: clock byte A (the row's decade+coarse)
+REG_CLOCK_B = 0x20000001  # write 1: clock byte B (the fine step)
+
+#: The 20-row rate table (rows 0-19). Row 0 is the vendor's special DDR
+#: path (not offered); rows 1-19 are the usable 500 MHz..1 kHz range.
+#: Each row is (byte_a, byte_b). MEASURED through the rate table; the
+#: bench's working chain writes row 18 (0x51, 0x44).
+RATE_TABLE: tuple[tuple[int, int], ...] = (
+    (0x00, 0x00), (0x00, 0x00), (0x00, 0x00), (0x01, 0x00), (0x11, 0x00),
+    (0x11, 0x11), (0x11, 0x44), (0x21, 0x00), (0x21, 0x11), (0x21, 0x44),
+    (0x31, 0x00), (0x31, 0x11), (0x31, 0x44), (0x41, 0x00), (0x41, 0x11),
+    (0x41, 0x44), (0x51, 0x00), (0x51, 0x11), (0x51, 0x44), (0x61, 0x00),
+)
+
+#: The usable rows' sample periods in seconds, indexed by row (rows 1-19;
+#: row 0 is the not-offered DDR path and carries no period here).
+RATE_PERIODS_S: tuple[float | None, ...] = (
+    None, 2e-9, 4e-9, 5e-9, 1e-8, 2e-8, 5e-8, 1e-7, 2e-7, 5e-7,
+    1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3,
+)
+
+
+def rate_row_for_hz(rate_hz: float) -> int:
+    """The table row whose period is the largest not exceeding ``rate_hz``.
+
+    The table's rows are discrete; a requested rate between rows selects
+    the next slower row (the conservative capture), and a rate faster than
+    row 1 selects row 1 - the specification's single-rate ceiling.
+    """
+    import math
+
+    if not isinstance(rate_hz, (int, float)) or isinstance(rate_hz, bool):
+        raise ValueError("rate must be a number")
+    if not math.isfinite(rate_hz) or rate_hz <= 0:
+        raise ValueError("rate must be positive and finite")
+    # Rows ascend from fast to slow; the fastest row whose frequency does
+    # not exceed the request is the FIRST qualifying row.
+    for row in range(1, 20):
+        period = RATE_PERIODS_S[row]
+        if period is not None and 1.0 / period <= rate_hz:
+            return row
+    return 19
+
+
+def clock_bytes(row: int) -> tuple[int, int]:
+    """The (byte A, byte B) pair of one rate-table row."""
+    if not isinstance(row, int) or isinstance(row, bool) or not 0 <= row < len(RATE_TABLE):
+        raise ValueError("row must index the rate table")
+    return RATE_TABLE[row]
+
 # --- Evidence taxonomy (fold R16, #562) ------------------------------------
 #
 # Every evidence kind the adapter's record_evidence call sites emit is

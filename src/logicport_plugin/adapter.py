@@ -44,7 +44,7 @@ _READ_PARAMETERS = frozenset(
     {"status", "trigger_position", "frequency_a", "frequency_b", "frequency_c", "frequency_d"}
 )
 _FREQUENCY_SLOTS = {"frequency_a": 0, "frequency_b": 1, "frequency_c": 2, "frequency_d": 3}
-_WRITE_PARAMETERS = frozenset({"rate_word", "threshold_v"})
+_WRITE_PARAMETERS = frozenset({"rate_hz", "threshold_v"})
 _INVOKE_ACTIONS = frozenset(
     {
         "configure_fpga",
@@ -270,22 +270,14 @@ class Plugin:
                     remaining()
                     await context.mark_dispatch_started()
                     return await self._write_threshold(context, operation_id, verb, float(volts))
-                # rate_word: the C1 address word itself is evidenced, but
-                # the 1-byte payload of the rate command is not decoded.
-                word = arguments["value"]
-                if isinstance(word, bool) or not isinstance(word, int):
-                    return failure("INVALID_ARGUMENT", "rate_word must be an integer")
-                if not 0 <= word <= 0xFFFFFFFF:
-                    return failure("INVALID_ARGUMENT", "rate_word must fit 32 bits")
-                if proto.RATE_COMMAND_PAYLOAD is None:
-                    return failure(
-                        "UNSUPPORTED",
-                        "C1 rate-command payload byte is not decoded "
-                        "(LogicPort-Protocol.md section 3.1 open item)",
-                    )
+                # rate_hz: the clock bank's two row bytes (the packed
+                # rate-word model is retracted - see _write_rate).
+                rate_hz = arguments["value"]
+                if isinstance(rate_hz, bool) or not isinstance(rate_hz, (int, float)):
+                    return failure("INVALID_ARGUMENT", "rate_hz must be a number")
                 remaining()
                 await context.mark_dispatch_started()
-                return await self._write_rate(context, operation_id, verb, word)
+                return await self._write_rate(context, operation_id, verb, rate_hz)
 
             if verb == "reset":
                 if arguments != {}:
@@ -470,43 +462,46 @@ class Plugin:
             "source": "device",
         }
 
-    async def _write_rate(self, context, operation_id, verb, word):
-        """C1 rate command: packed word in the address field (§3.1).
+    async def _write_rate(self, context, operation_id, verb, rate_hz):
+        """The rate as the clock bank's two row bytes (TR §"Clock bank").
 
-        The payload byte is the open item the caller-side refusal already
-        checked; this path is reachable only once it is decoded.
+        The old packed-word model (one C1 carrying a 16-bit rate value plus
+        a one-byte payload) is retracted: the rate is one row of the 20-row
+        table, written as TWO one-byte writes - byte A at 0x20000000, byte
+        B at 0x20000001 (page 0x2000). The bench's working chain writes row
+        18 exactly this way (full_load.c line 45).
         """
-        if self._rate_word is not None and (self._rate_word >> 16) != (word >> 16):
-            # The packed rate word's HIGH half is the clock select, and a
-            # clock-select change is a page select: record §3.1, "The app
-            # packs rate and clock select into one value. The low 16 bits
-            # are the rate value. The clock select is Int(value / 65536.0).
-            # When the clock select changes, the host sends 0xC3 first."
-            # Sending the LOW half here (fold R3) put the rate value in the
-            # select field — the inversion that silenced the device.
-            # The rate command IS the priming write: selecting and then
-            # writing is the vendor's own order (record addendum 32).
-            await self._select_segment(
-                context,
-                word >> 16,
-                prime_frame=proto.frame_c1(word, proto.payload_byte(proto.RATE_COMMAND_PAYLOAD)),
-            )
-        else:
-            await self._send_frame(
-                proto.frame_c1(word, proto.payload_byte(proto.RATE_COMMAND_PAYLOAD)), context
-            )
-            await self._ack_write(context)
-        self._rate_word = word
+        try:
+            row = proto.rate_row_for_hz(rate_hz)
+            byte_a, byte_b = proto.clock_bytes(row)
+        except ValueError as exc:
+            return self._failure_inject(operation_id, verb, "INVALID_ARGUMENT", str(exc))
+        remaining = self._deadline_check(context)
+        remaining()
+        await context.mark_dispatch_started()
+        # The clock page's own writes prime it (addendum 32's order).
+        await self._select_segment(
+            context,
+            proto.segment_of(proto.REG_CLOCK_A),
+            prime_frame=proto.frame_c1(
+                proto.wire_address(proto.REG_CLOCK_A), proto.payload_byte(byte_a)
+            ),
+            reprime_frame=proto.frame_c1(
+                proto.wire_address(proto.REG_CLOCK_B), proto.payload_byte(byte_b)
+            ),
+        )
         return {
             "operation_id": operation_id,
             "verb": verb,
             "status": "ok",
             "data": {
-                "parameter": "rate_word",
-                "requested_value": word,
-                "effective_value": word,
+                "parameter": "rate_hz",
+                "requested_value": rate_hz,
+                "effective_value": 1.0 / proto.RATE_PERIODS_S[row],
                 "assurance": "dispatched",
                 "verification": None,
+                "x-logicport-row": row,
+                "x-logicport-clock-bytes": [byte_a, byte_b],
             },
         }
 
@@ -574,7 +569,7 @@ class Plugin:
         """C3 stop with the cached rate word (§3.3)."""
         if inputs != {}:
             return self._failure_inject(operation_id, verb, "INVALID_ARGUMENT", "stop takes no input")
-        word = (self._rate_word or 0) & 0xFFFF
+        word = 0  # the packed rate word is retracted; stop carries no value
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
