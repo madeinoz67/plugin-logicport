@@ -40,3 +40,7 @@
 - [x] 0x61 conflict reconciled from the record's own Part I: enable at
       0x0100_0000 (row-19 byte A), fault at 0x0010_0000 (status) - one
       register apart, both already bench-proven in their own direction
+
+- [x] PR-7 pre-merge bench validation: trigger_position read OK through the
+      SDK transport (session-2026-11-07-pr7-first-read.json) - the ring
+      purge is proven on hardware

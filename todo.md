@@ -39,5 +39,11 @@
       pyftdi_full_load.py (close/reopen, C3 mode page, 0x61 to 0x0100_0000,
       ACK printed). Your go = one run of `chain --enable`. Regression run
       without the flag is clean. [memory files written 2026-11-07]
-- [ ] When PR-7 lands: re-run the recorder against it; then Phase 3 vectors
-      rebuild
+- [x] PR-7 (SDK #239) validated on hardware PRE-MERGE from the pr7-builder
+      worktree in a scratch venv: first plugin read through the transport
+      EVER (trigger_position ok); stale-ring echo class gone; comment
+      6690919120 on the PR carries the evidence. Remaining failures are
+      reply-pacing shaped (plugin-side row below)
+- [ ] After 239 merges: pace reads for the honest-empty regime (retry the
+      exact-byte receive on empty); then Phase 3 vectors rebuild from a
+      clean capture

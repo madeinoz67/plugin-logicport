@@ -76,7 +76,7 @@ def main(out_path: str) -> int:
             plugin,
             "record",
             driver_factory=driver_factory,
-            record_path="/tmp/logicport-journal.json",
+            record_path=pathlib.Path("/tmp/logicport-journal.json"),
         )
         # Deliberate: the injected factory marks the session rehearsal, but the
         # driver behind it is the real device. This is a bench session.
@@ -126,6 +126,10 @@ def main(out_path: str) -> int:
                 results.append({"op": op, "payload": payload, "result": await session.execute(op, payload)})
             except Exception as exc:  # the failure IS the evidence
                 results.append({"op": op, "payload": payload, "error": f"{type(exc).__name__}: {exc}"})
+        try:
+            await session.close()
+        except Exception as exc:
+            results.append({"op": "close", "payload": {}, "error": f"{type(exc).__name__}: {exc}"})
         return results, xfers
 
     results, xfers = asyncio.run(run())
