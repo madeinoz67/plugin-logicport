@@ -36,3 +36,7 @@
 - [x] Engine-no-start root-caused from the records: pre-fill phase bits
       (00/40/60) confirmed on hardware; the missing 0x61 enable identified
       with its addendum-76 conflict
+
+- [x] 0x61 conflict reconciled from the record's own Part I: enable at
+      0x0100_0000 (row-19 byte A), fault at 0x0010_0000 (status) - one
+      register apart, both already bench-proven in their own direction

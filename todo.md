@@ -30,10 +30,13 @@
       status 00 = pre-fill per the lane's phase bits). The decode lane
       names the missing enable: close/reopen + C1 0x100000<-0x61 ("the
       input-conditioning/sample-engine enable the session was missing")
-- [ ] FORK (principal's call, hardware risk): 0x61 to 0x00100000 is the
-      lane's engine enable BUT addendum 76 measured it as FAULT (LED dark,
-      replug only) when written bare. Reconciliation hypothesis: the vendor
-      writes it only after a close/reopen. Attempt = your word; you are at
-      the bench and can replug
+- [x] Fork RESOLVED on paper (no hardware risk): the lane's enable is
+      0x61 to 0x0100_0000 (mode block byte 0 = rate row 19's byte A,
+      vendor writes it after a close/reopen; proven 2026-10-28, ACK C1 00
+      01, LED ON); addendum 76's fault is the SAME byte to 0x0010_0000
+      (status). One register apart. Constants renamed in protocol.py
+- [ ] Bench go (principal): add close/reopen + ENGINE_ENABLE (0x61 ->
+      0x0100_0000) to the chain prover before arm; expect pre-fill to run
+      and D0's 100 Hz in the window
 - [ ] When PR-7 lands: re-run the recorder against it; then Phase 3 vectors
       rebuild

@@ -70,11 +70,21 @@ INIT_BAUD = 460800
 #: and an earlier note in these records claimed ~1.4 s at 3 Mbaud, which the
 #: arithmetic does not allow (it implies about 6 Mbaud).
 
-#: A client must NEVER write the wake byte. `0x61` to `0x00100000` puts the
-#: device into the FAULT state: the LED goes dark and only a replug clears
-#: it (record addendum 76). The vendor gates that byte behind a flag no
-#: shipped path sets, and this plugin sends no init write at all. Kept as a
-#: named constant so the prohibition has one obvious place to be read.
+#: TWO registers, one byte value - keep them straight (reconciled against
+#: the record's Part I line "the 0x61 byte ... is the clock register write
+#: at 0x1000000, the slowest clock"):
+#:
+#: - 0x61 to 0x0100_0000 (the mode block's byte 0) is the ENGINE ENABLE -
+#:   rate row 19's byte A, written by the vendor after validate/resync and
+#:   a close/reopen. Proven on this bench (wake_arm.c / clean_run.c,
+#:   2026-10-28: ACK `C1 00 01`, LED ON).
+#: - 0x61 to 0x0010_0000 (the STATUS register) is the FAULT write: LED
+#:   dark, only a replug clears it (addendum 76).
+#:
+#: The fault and the enable differ by one register. Kept as named constants
+#: so neither is ever spelled from memory.
+ENGINE_ENABLE_BYTE = 0x61
+ENGINE_ENABLE_REGISTER = 0x01000000
 FORBIDDEN_WAKE_BYTE = 0x61
 FORBIDDEN_WAKE_ADDRESS = 0x00100000
 
