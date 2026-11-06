@@ -19,3 +19,6 @@
 - [x] Lane fold onto #589 (comment 6687015879): capture path, configuration,
       decoders; presets row closed at d9b4ea2 / PR #10
 - [x] Protocol record addendum 77 (2026-11-06): C-parity lap measured
+
+- [x] pyftdi_full_load.py: device answers in dialect through pyftdi alone
+      (addendum 78) - driver-layer hypothesis overturned, fork dissolved

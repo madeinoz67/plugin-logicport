@@ -7,4 +7,7 @@
       path, configuration, decoders rows + presets row closed at d9b4ea2
 - [x] Addendum 77 appended to the protocol record: seven measured deltas,
       the once-only prime result, driver-layer hypothesis named
-- [ ] Ask principal to rule the Phase 4 fork (libftdi driver vs pyftdi probe)
+- [x] Fork DISSOLVED by measurement: pyftdi_full_load.py talks (counters
+      00-08) - driver exonerated, fault is the SDK transport wrapping
+- [ ] Bisect SDK transport vs pyftdi_full_load.py: timeouts, establish
+      init, chunk size, post-flush 64-byte drain (addendum 78)

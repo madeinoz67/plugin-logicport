@@ -31,12 +31,12 @@ rows. Non-blocking per principal ruling.
 never hand-authored. Blocked on a plugin run that completes framed
 exchanges (Phase 4 gate).
 
-## Phase 4 — Driver fork resolution (the blocker)
+## Phase 4 — SDK transport bisect (was: driver fork — dissolved 2026-11-06)
 
-Proven path is libftdi (`tools/full_load.c`); plugin rides pyftdi via the
-SDK. Fork: libftdi-backed driver for the plugin vs pyftdi differential
-probing (bitmode-switch purge, USB transfer size, latency handling).
-Principal call pending.
+pyftdi talks (pyftdi_full_load.py, counters 00-08, addendum 78). The
+fault is the SDK transport wrapping: timeouts the C path never sets, the
+establish path's own init, chunk size, or the missing post-flush 64-byte
+drain. Bisect one difference at a time against the working script.
 
 ## Phase 5 — First decoded capture end-to-end
 
