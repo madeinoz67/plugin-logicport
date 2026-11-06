@@ -32,3 +32,7 @@
 - [x] Capture engine proven outside the SDK: the Client Guide's full
       sequence (disarm/enable, fill-limit pages 0x0020/0x0040, tail 0x000D,
       exit-prefill 0x000A) runs the cursor; unconfigure-before-load added
+
+- [x] Engine-no-start root-caused from the records: pre-fill phase bits
+      (00/40/60) confirmed on hardware; the missing 0x61 enable identified
+      with its addendum-76 conflict

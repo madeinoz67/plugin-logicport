@@ -25,8 +25,15 @@
       engine RUNS (cursor advances and wraps, exit-prefill completes,
       cursor-relative fetch returns 256B) - full_load's static cursor was
       the missing 0x000A exit-prefill write
-- [ ] D0 window reads idle-flat (bf every byte): fetch the full 2048B ring
-      and the before-cursor region; verify the 100 Hz D0 / 14 kHz counter
-      signals land in the window
+- [x] Flat-window root-cailed to the doc records: the engine never starts
+      (cursor static at 6 BEFORE completion; full 2048B ring all-idle bf;
+      status 00 = pre-fill per the lane's phase bits). The decode lane
+      names the missing enable: close/reopen + C1 0x100000<-0x61 ("the
+      input-conditioning/sample-engine enable the session was missing")
+- [ ] FORK (principal's call, hardware risk): 0x61 to 0x00100000 is the
+      lane's engine enable BUT addendum 76 measured it as FAULT (LED dark,
+      replug only) when written bare. Reconciliation hypothesis: the vendor
+      writes it only after a close/reopen. Attempt = your word; you are at
+      the bench and can replug
 - [ ] When PR-7 lands: re-run the recorder against it; then Phase 3 vectors
       rebuild
