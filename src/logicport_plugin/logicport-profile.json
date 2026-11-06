@@ -49,19 +49,35 @@
         "type": "object",
         "properties": {
           "slot": {
-            "type": "string"
+            "type": "integer"
           },
-          "offset": {},
-          "length": {},
-          "bitstream_bytes": {},
-          "digest_verified": {},
-          "checksum_ok": {},
-          "pages_swapped": {},
-          "init_asserted": {},
+          "offset": {
+            "type": "integer"
+          },
+          "length": {
+            "type": "integer"
+          },
+          "bitstream_bytes": {
+            "type": "integer"
+          },
+          "digest_verified": {
+            "type": "boolean"
+          },
+          "checksum_ok": {
+            "type": "boolean"
+          },
+          "pages_swapped": {
+            "type": "boolean"
+          },
+          "init_asserted": {
+            "type": "boolean"
+          },
           "done": {
             "type": "boolean"
           },
-          "rate_command_resent": {},
+          "rate_command_resent": {
+            "type": "boolean"
+          },
           "attempts": {
             "type": "integer"
           }
@@ -140,7 +156,9 @@
           "acknowledged": {
             "type": "boolean"
           },
-          "rate_word": {}
+          "rate_word": {
+            "type": "integer"
+          }
         },
         "required": [
           "acknowledged",
@@ -209,6 +227,17 @@
       "output_schema": {
         "type": "object",
         "properties": {
+          "trigger_column": {
+            "type": "object",
+            "properties": {
+              "when trigger_word given": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "when trigger_word given"
+            ]
+          },
           "column_count": {
             "type": "integer"
           },
@@ -226,27 +255,16 @@
           },
           "total_samples": {
             "type": "integer"
-          },
-          "trigger_column": {
-            "type": "object",
-            "properties": {
-              "when trigger_word given": {
-                "type": "integer"
-              }
-            },
-            "required": [
-              "when trigger_word given"
-            ]
           }
         },
         "required": [
+          "trigger_column",
           "column_count",
           "page_base",
           "trigger_position",
           "columns",
           "runs",
-          "total_samples",
-          "trigger_column"
+          "total_samples"
         ]
       },
       "side_effect": "none",
@@ -262,10 +280,29 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "frequencies_hz (a": {},
-          "b": {},
-          "c": {},
-          "d)": {},
+          "frequencies_hz": {
+            "type": "object",
+            "properties": {
+              "a": {
+                "type": "integer"
+              },
+              "b": {
+                "type": "integer"
+              },
+              "c": {
+                "type": "integer"
+              },
+              "d": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "a",
+              "b",
+              "c",
+              "d"
+            ]
+          },
           "unit": {
             "type": "string"
           },
@@ -278,9 +315,6 @@
         },
         "required": [
           "frequencies_hz",
-          "b",
-          "c",
-          "d)",
           "unit",
           "quality",
           "source"

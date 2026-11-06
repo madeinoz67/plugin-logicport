@@ -1,7 +1,7 @@
 {
   "contract_version": "0.4.0",
   "plugin_id": "intronix.logicport",
-  "descriptor_sha256": "91a8a8ffe33cc3228225b8f17b17a0b621eb2ba597df84ea9a1843a0935dde6b",
+  "descriptor_sha256": "9299eb0ea1e6101c3697f15ff4ab1ec0f28a8a5ac96525101345d01f18825d01",
   "bindings": [
     {
       "id": "capture",
