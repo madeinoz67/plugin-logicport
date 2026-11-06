@@ -37,6 +37,7 @@
       (status). One register apart. Constants renamed in protocol.py
 - [ ] Bench go (principal): add close/reopen + ENGINE_ENABLE (0x61 ->
       0x0100_0000) to the chain prover before arm; expect pre-fill to run
-      and D0's 100 Hz in the window
+      and D0's 100 Hz in the window [memory files written 2026-11-07:
+      0x61 two-registers note + exit-prefill chain note]
 - [ ] When PR-7 lands: re-run the recorder against it; then Phase 3 vectors
       rebuild
