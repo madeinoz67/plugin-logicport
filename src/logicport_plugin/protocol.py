@@ -54,6 +54,11 @@ FPGA_BITSTREAM_START = 0x04  # bitstream-start byte (Protocol §5 step 7)
 INIT_READ_TIMEOUT_MS = 5000
 INIT_WRITE_TIMEOUT_MS = 5000
 INIT_LATENCY_MS = 4
+#: 460800 everywhere — the rate the WORKING C tool loads at (full_load.c
+#: sets 460800 and streams the whole body successfully, twice on 2026-11-06).
+#: The Technical Reference's load-recipe step 1 claims 3 Mbaud; measured on
+#: this unit the 3 Mbaud load produces an 00/EE alternating filler state,
+#: so the claim is wrong for this hardware. Bench is operational truth.
 INIT_BAUD = 460800
 
 #: Bitstream configuration is the one phase where the serial rate dominates,
@@ -172,6 +177,8 @@ EVIDENCE_COUNTER_GAP = "logicport.counter_gap"
 EVIDENCE_COUNTER_REBASELINED = "logicport.counter_rebaselined"
 EVIDENCE_CAPTURE_GATE = "logicport.capture_gate"
 EVIDENCE_C3_DRAIN = "logicport.c3_drain"
+EVIDENCE_C3_ACK = "logicport.c3_ack"
+EVIDENCE_PRIME = "logicport.prime"
 EVIDENCE_CONFIGURE_PENDING_WRITES = "logicport.configure.pending_writes"
 EVIDENCE_FETCH_DATASET = "logicport.fetch.dataset"
 
@@ -183,6 +190,8 @@ EVIDENCE_KINDS = frozenset(
         EVIDENCE_COUNTER_REBASELINED,
         EVIDENCE_CAPTURE_GATE,
         EVIDENCE_C3_DRAIN,
+        EVIDENCE_C3_ACK,
+        EVIDENCE_PRIME,
         EVIDENCE_CONFIGURE_PENDING_WRITES,
         EVIDENCE_FETCH_DATASET,
     }
@@ -405,6 +414,26 @@ def wire_address(register: int) -> int:
     if not isinstance(register, int) or isinstance(register, bool) or register < 0:
         raise ValueError("register must be a nonnegative int")
     return register & 0xFFFF
+
+
+def segment_of(register: int) -> int:
+    """The C3 page select for a 32-bit register address: ``addr >> 16``.
+
+    The record settles this in two places: the register map (§C, "a
+    register is selected by a ``C3`` frame carrying ``addr >> 16`` (the
+    segment, cached in ``_DAT_005977e8``)"), and the static decode's
+    ``Int(reg/65536)`` comparison against that same cache. A framed
+    command whose segment differs from the device's cached select reads
+    the wrong page — every register read returns zeros without it, which
+    is why the 2026-10-26 probes concluded there was no address on the
+    wire when the frame was in fact missing entirely.
+    """
+    if not isinstance(register, int) or isinstance(register, bool) or register < 0:
+        raise ValueError("register must be a nonnegative int")
+    segment = register >> 16
+    if segment > 0xFFFF:
+        raise ValueError("segment does not fit the 16-bit select field")
+    return segment
 
 
 def sample_plane_wire_address(plane: int, page_base: int) -> int:
@@ -751,6 +780,32 @@ def parse_write_ack(data: bytes) -> ReplyFrame:
     return ReplyFrame(data[0], data[2], 0, b"")
 
 
+def parse_c3_ack(data: bytes) -> ReplyFrame:
+    """Parse the 3-byte page-select ACK ``C3 00 <counter>``.
+
+    The record proves this grammar on hardware: "The C3 ACK grammar is
+    proven: 3 bytes (C3 echo, 00, counter)", with ``C3 00 01``,
+    ``C3 00 32`` and ``C3 00 5B`` observed across a run, and the counter
+    staying continuous across ``C1`` and ``C3`` frames.
+
+    The adapter used to DRAIN this reply instead of parsing it (fold R3,
+    whose premise was that the C3 reply shape was unproven — it is now
+    proven, so the premise is gone). Draining was not harmless: the
+    device increments its counter on a C3, so a drained ACK leaves the
+    adapter's counter view one behind and the next parsed reply trips a
+    phantom gap refusal.
+    """
+    if not isinstance(data, bytes):
+        raise ValueError("a reply is bytes")
+    if len(data) != WRITE_ACK_BYTES:
+        raise ValueError(f"the C3 ACK is exactly {WRITE_ACK_BYTES} bytes")
+    if data[0] != CMD_STOP:
+        raise ValueError(f"C3 ACK echo {data[0]:#04x} != {CMD_STOP:#04x}")
+    if data[1] != 0:
+        raise ValueError(f"C3 ACK second byte {data[1]:#04x} is not 0x00")
+    return ReplyFrame(data[0], data[2], 0, b"")
+
+
 def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
     """Split an observed read reply into ``(counter, data)``.
 
@@ -857,13 +912,9 @@ def ftdi_set_latency(ms: int = INIT_LATENCY_MS) -> dict:
 
 
 def ftdi_set_baud(baud: int = INIT_BAUD) -> dict:
-    """FT_SetBaudRate. Default and only used value is 460800.
-
-    The configuration stream is rate-bound: 460800 at 8N1 carries 46,080 B/s,
-    so a 1,057,840-byte slot takes 22.96 s. Raising the rate would shorten it
-    (3 Mbaud gives 300,000 B/s and a 3.53 s floor) but no faster path is
-    implemented here, and the plugin never sends anything but ``INIT_BAUD``.
-    """
+    """FT_SetBaudRate. ``INIT_BAUD`` (460800) for the command phase,
+    ``LOAD_BAUD`` (3 Mbaud, the Technical Reference's load-recipe step 1)
+    for the FPGA bitstream phase."""
     if not isinstance(baud, int) or isinstance(baud, bool) or baud < 1:
         raise ValueError("baud must be positive")
     return ftdi_control("set_baud", baud=baud)

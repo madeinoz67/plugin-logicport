@@ -18,7 +18,7 @@ from benchweave_sdk.conformance import check_lifecycle
 from benchweave_sdk.testing import MockContext, MockHost
 from benchweave_sdk.validation import validate_descriptor, validate_result
 
-from logicport_plugin import protocol as proto
+from logicport_plugin import adapter, protocol as proto
 from logicport_plugin.adapter import create_plugin
 
 import os
@@ -49,12 +49,16 @@ def _exact_ack(counter):
 
 
 def _frame_send(frame):
-    return _exchange(proto.stream_send(frame), {})
+    """A framed send is preceded by the RX purge (C-tools tcioflush)."""
+    return [
+        _exchange(proto.ftdi_purge("rx"), {}),
+        _exchange(proto.stream_send(frame), {}),
+    ]
 
 
 def _register_read(frame, payload):
     return [
-        _frame_send(frame),
+        *_frame_send(frame),
         _exchange(proto.stream_receive(4, 4), {"data": payload}),
     ]
 
@@ -62,7 +66,7 @@ def _register_read(frame, payload):
 def _register_read_reply(frame, reply):
     """A register read whose reply carries the proven 4-byte header (#562)."""
     return [
-        _frame_send(frame),
+        *_frame_send(frame),
         _exchange(proto.stream_receive(len(reply), len(reply)), {"data": reply}),
     ]
 
@@ -217,7 +221,7 @@ def test_write_threshold_sends_dac_word_to_0x100008():
         # trigger-position writes). 0 V -> DAC code 473.
         host = MockHost(
             [
-                _frame_send(proto.frame_c1(proto.wire_address(0x100008), proto.payload_word(473))),
+                *_frame_send(proto.frame_c1(proto.wire_address(0x100008), proto.payload_word(473))),
                 _exact_ack(0x5B),
             ]
         )
@@ -308,7 +312,7 @@ def test_frequency_read_counter_steps_across_write_and_reads():
         # two read replies step +1 through the whole operation —
         # ACK 0x4F -> gate 0x50 -> count 0x51. No per-direction counter.
         script = [
-            _frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
+            *_frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
             _exact_ack(0x4F),
             *_register_read_reply(
                 proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1),
@@ -369,54 +373,48 @@ def test_write_rate_refuses_open_payload():
     asyncio.run(run())
 
 
-def test_invoke_stop_sends_c3():
+def test_stop_refuses_an_unprimed_segment():
+    """Stop has no write of its own, so it may not toggle a page select.
+
+    Record addendum 32, rule 1: ``C3`` followed straight by a framed
+    command is the shape that put the device into the EE state twice. Stop
+    transmits no write, so on a segment no prior write has primed it
+    refuses instead of sending the select. Nothing reaches the wire.
+    """
     async def run():
-        # The C3 reply shape is UNPROVEN (#562 fold R3): no ACK is parsed.
-        # The drain swallows whatever the device has delivered — here a
-        # hypothetical 3-byte C3 reply — as c3_drain evidence only.
-        host = MockHost(
-            [
-                _frame_send(proto.frame_c3(0)),
-                _exchange(
-                    proto.stream_receive(8, None), {"data": b"\xc3\x00\x5b"}
-                ),
-            ]
-        )
+        host = MockHost([])
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
         await plugin.open(_descriptor(), host, context)
         request = _request("invoke", {"action_id": "stop", "input": {}})
         result = await plugin.execute(request, context)
         validate_result(result, request)
-        assert result["status"] == "ok"
-        assert result["data"]["action_id"] == "stop"
-        assert result["data"]["result"]["acknowledged"] is True
-        assert host.evidence == [{"kind": "logicport.c3_drain", "bytes": 3}]
-        assert plugin._last_counter is None  # the drain never parses
-        host.assert_complete()
+        assert result["status"] != "ok", result
+        host.assert_complete()  # no transaction was offered
         await plugin.close(context)
     asyncio.run(run())
 
 
-def test_c3_does_not_consume_a_counter_parse():
-    """Fold R3 continuity: after a parsed ACK baseline, a C3 frame whose
-    reply bytes the drain swallows WITHOUT parsing must leave the counter
-    view untouched — the next parsed reply at baseline+1 succeeds, no gap.
+def test_c3_ack_is_parsed_and_advances_the_counter():
+    """The C3 ACK grammar is proven, so it is parsed, not drained.
 
-    On hardware a real C3 ACK's counter (if any) therefore WILL register
-    as a gap on the next parse: the gap evidence is what surfaces the true
-    C3 reply shape — honest by design (disclosed in protocol.md)."""
+    The record measured three-byte ``C3 00 <counter>`` replies at counter
+    values 0x01, 0x32 and 0x5B with the counter continuous across ``C1``
+    and ``C3`` frames. Fold R3 drained this reply on the premise that the
+    shape was unproven; that premise is gone, and a drain would leave the
+    counter view one behind so the next parsed reply tripped a phantom gap.
+    """
     async def run():
         host = MockHost(
             [
                 _exact_ack(0x5C),  # baseline
-                _frame_send(proto.frame_c3(0)),
-                _exchange(
-                    proto.stream_receive(8, None), {"data": b"\xc3\x00\x64"}
-                ),
+                *_frame_send(proto.frame_c3(0x0010)),
+                _exchange(proto.stream_receive(3, 3), {"data": b"\xc3\x00\x5d"}),
+                *_frame_send(proto.frame_c1(0x0003, b"\x00")),  # the priming write
+                _exact_ack(0x5E),
                 *_register_read_reply(
                     proto.frame_c2(0x0000, 4),
-                    bytes.fromhex("C2005D00" "00000000"),
+                    bytes.fromhex("C2005F00" "00000000"),
                 ),
             ]
         )
@@ -424,18 +422,18 @@ def test_c3_does_not_consume_a_counter_parse():
         context = MockContext("op-1", deadline_monotonic=1.0)
         await plugin.open(_descriptor(), host, context)
         await context.mark_dispatch_started()
-        await plugin._ack_write(context)  # lock the baseline at 0x5C
-        stop = _request("invoke", {"action_id": "stop", "input": {}})
-        result = await plugin.execute(stop, context)
+        await plugin._ack_write(context)  # baseline 0x5C
+        await plugin._select_segment(
+            context, 0x0010, prime_frame=proto.frame_c1(0x0003, b"\x00")
+        )
+        assert plugin._segment == 0x0010
+        assert plugin._last_counter == 0x5E  # ACK then the priming write
+        result = await plugin.execute(
+            _request("read", {"parameter": "status"}, operation_id="op-1"), context
+        )
+        validate_result(result, _request("read", {"parameter": "status"}))
         assert result["status"] == "ok", result
-        assert plugin._last_counter == 0x5C  # the C3 advanced nothing
-        context2 = MockContext("op-2", deadline_monotonic=1.0)
-        read = _request("read", {"parameter": "status"}, operation_id="op-2")
-        result = await plugin.execute(read, context2)
-        validate_result(result, read)
-        assert result["status"] == "ok", result  # 0x5D = 0x5C + 1: no gap
-        assert result["data"]["value"] == 0x5D
-        assert plugin._last_counter == 0x5D
+        assert plugin._last_counter == 0x5F
         host.assert_complete()
         await plugin.close(context)
     asyncio.run(run())
@@ -478,7 +476,11 @@ def _init_transfers():
 def test_invoke_resync_flush_sequence():
     async def run():
         host = MockHost(
-            _init_transfers()
+            [
+                _exchange(proto.ftdi_set_timeouts(), {}),
+                _exchange(proto.ftdi_set_latency(), {}),
+                _exchange(proto.ftdi_set_baud(), {}),
+            ]
             + [
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
@@ -487,7 +489,7 @@ def test_invoke_resync_flush_sequence():
                 _exchange(proto.stream_send(b"\x01"), {"sent": 1}),
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
-            ]
+            ] + _prime_reads()
         )
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
@@ -507,7 +509,11 @@ def test_invoke_resync_fails_when_flush_short():
         # The long flush reports fewer than 65534 sent: the attempt fails
         # and the operation reports an uncertain outcome (post-dispatch).
         host = MockHost(
-            _init_transfers()
+            [
+                _exchange(proto.ftdi_set_timeouts(), {}),
+                _exchange(proto.ftdi_set_latency(), {}),
+                _exchange(proto.ftdi_set_baud(), {}),
+            ]
             + [
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
@@ -536,8 +542,11 @@ def test_resync_rebaselines_the_counter():
     async def run():
         host = MockHost(
             [_exact_ack(0x5C)]  # lock the baseline
-            + _init_transfers()
             + [
+                _exchange(proto.ftdi_set_timeouts(), {}),
+                _exchange(proto.ftdi_set_latency(), {}),
+                _exchange(proto.ftdi_set_baud(), {}),
+            ] + [
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
                 _exchange(proto.stream_send(b"\x00" * 65535), {"sent": 65535}),
@@ -545,6 +554,7 @@ def test_resync_rebaselines_the_counter():
                 _exchange(proto.stream_send(b"\x01"), {"sent": 1}),
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
+                *_prime_reads(),
                 *_register_read_reply(
                     proto.frame_c2(0x0000, 4),
                     bytes.fromhex("C2009900" "00000000"),
@@ -571,7 +581,9 @@ def test_resync_rebaselines_the_counter():
             for entry in host.evidence
             if entry["kind"] == "logicport.counter_rebaselined"
         ]
-        assert len(rebaselines) == 2  # the embedded init + the flush success
+        # One rebaseline: the flush's own success. The chip reset that
+        # used to open the flush (and emit the second) is gone — addendum 10.
+        assert len(rebaselines) == 1
         host.assert_complete()
         await plugin.close(context)
     asyncio.run(run())
@@ -635,13 +647,16 @@ def _synthetic_ccf(tmp_path, slot_len=4096):
     against the real constant by test_configure_fpga_refuses_bad_digest."""
     import hashlib
 
-    decoded = [slot_len // 16] + [1] * 7
+    # The sized slot sits at index 7 — the adapter's default image. Filler
+    # slots carry the parser's minimum (16 bytes) since zero is refused;
+    # the whole body = 7*16 + slot_len.
+    decoded = [1] * 7 + [slot_len // 16]
     checksum = 0
     for value in decoded:
         checksum ^= value
     decoded.append(checksum)
     line = ",".join(str(value ^ proto.CCF_XOR_KEY) for value in decoded) + "\n"
-    blob = line.encode("ascii") + bytes(slot_len + 7 * 16)
+    blob = line.encode("ascii") + bytes(7 * 16 + slot_len)
     path = tmp_path / "synthetic.ccf"
     path.write_bytes(blob)
     return str(path), hashlib.sha256(blob).hexdigest()
@@ -660,9 +675,9 @@ def _fpga_pass_script(bitstream, done_reads, chunk_sent=None, stop_after_short_c
         _exchange(proto.ftdi_purge("rx"), {}),
         _exchange(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), {}),
         _exchange(proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), {}),
-        _frame_send(bytes([proto.FPGA_PULSE_START])),
+        _exchange(proto.stream_send(bytes([proto.FPGA_PULSE_START])), {}),
         _exchange(proto.ftdi_read_pins(), {"data": b"\x00"}),  # DONE cleared
-        _frame_send(bytes([proto.FPGA_BITSTREAM_START])),
+        _exchange(proto.stream_send(bytes([proto.FPGA_BITSTREAM_START])), {}),
         _exchange(proto.ftdi_read_pins(), {"data": b"\x08"}),  # INIT high
     ]
     for index, offset in enumerate(range(0, len(bitstream), proto.BITSTREAM_CHUNK_MAX)):
@@ -675,7 +690,7 @@ def _fpga_pass_script(bitstream, done_reads, chunk_sent=None, stop_after_short_c
                 )
                 return script
         else:
-            script.append(_frame_send(chunk))
+            script.append(_exchange(proto.stream_send(chunk), {}))
     for pins in done_reads:
         script.append(_exchange(proto.ftdi_read_pins(), {"data": pins}))
     script.append(_exchange(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), {}))
@@ -696,9 +711,25 @@ def _pace_clock(host, per_transfer_s=0.05):
     host.transfer = paced
 
 
+def _prime_reads():
+    """Eight N=1 segment-0 prime reads (TR step 10), unparsed replies."""
+    rows = []
+    for _ in range(adapter._PRIME_READ_COUNT):
+        rows += _frame_send(proto.frame_c2(0x0000, 1))
+        rows.append(_exchange(proto.stream_receive(8, 8), {"data": b""}))
+    return rows
+
+
 def _flush_script():
-    """The section 3.4 completion flush that follows a successful pass."""
-    return _init_transfers() + [
+    """The section 3.4 completion flush that follows a successful pass.
+
+    No ftdi_reset_device: the flush re-asserts timeouts/latency/baud only
+    (addendum 10; the C tools' flush_dev never resets the chip)."""
+    return [
+        _exchange(proto.ftdi_set_timeouts(), {}),
+        _exchange(proto.ftdi_set_latency(), {}),
+        _exchange(proto.ftdi_set_baud(), {}),
+    ] + [
         _exchange(proto.ftdi_purge("tx"), {}),
         _exchange(proto.ftdi_purge("rx"), {}),
         _exchange(proto.stream_send(b"\x00" * 65535), {"sent": 65535}),
@@ -706,7 +737,7 @@ def _flush_script():
         _exchange(proto.stream_send(b"\x01"), {"sent": 1}),
         _exchange(proto.ftdi_purge("tx"), {}),
         _exchange(proto.ftdi_purge("rx"), {}),
-    ]
+    ] + _prime_reads()
 
 
 def test_configure_fpga_done_pin_never_asserts_refuses(tmp_path, monkeypatch):
@@ -719,7 +750,7 @@ def test_configure_fpga_done_pin_never_asserts_refuses(tmp_path, monkeypatch):
     monkeypatch.setattr(proto, "CCF_SHA256", digest)
 
     async def run():
-        host = MockHost(_fpga_pass_script(bytes(4096), [b"\x00"]) + _flush_script())
+        host = MockHost(_fpga_pass_script(bytes(7 * 16 + 4096), [b"\x00"]) + _flush_script())
         _pace_clock(host)
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=300.0)
@@ -752,7 +783,7 @@ def test_configure_fpga_done_asserted_still_ok(tmp_path, monkeypatch):
     monkeypatch.setattr(proto, "CCF_SHA256", digest)
 
     async def run():
-        host = MockHost(_fpga_pass_script(bytes(4096), [b"\x10"]) + _flush_script())
+        host = MockHost(_fpga_pass_script(bytes(7 * 16 + 4096), [b"\x10"]) + _flush_script())
         _pace_clock(host)
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=300.0)
@@ -794,13 +825,13 @@ def test_configure_fpga_short_write_propagates(tmp_path, monkeypatch):
         script = [
             _exchange(proto.ftdi_purge("rx"), {}),
             _exchange(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), {}),
-            _exchange(proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), {}),
-            _frame_send(bytes([proto.FPGA_PULSE_START])),
+                _exchange(proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), {}),
+            _exchange(proto.stream_send(bytes([proto.FPGA_PULSE_START])), {}),
             _exchange(proto.ftdi_read_pins(), {"data": b"\x00"}),  # DONE cleared
-            _frame_send(bytes([proto.FPGA_BITSTREAM_START])),
+            _exchange(proto.stream_send(bytes([proto.FPGA_BITSTREAM_START])), {}),
             _exchange(proto.ftdi_read_pins(), {"data": b"\x08"}),  # INIT high
             _exchange(
-                proto.stream_send(bytes(4096)),
+                proto.stream_send(bytes(7 * 16 + 4096)),  # the whole body, one chunk
                 ConnectionError("serial write reported 1023 of 1024 bytes"),
             ),
         ]
@@ -841,14 +872,14 @@ def test_configure_fpga_full_pass_real_bitstream():
     blob = Path(REAL_CCF).read_bytes()
     assert hashlib.sha256(blob).hexdigest() == proto.CCF_SHA256
     header = proto.parse_ccf_header(blob)
-    slot = proto.extract_ccf_slot(blob, header, 0)
+    slot = bytes(blob[header.body_offset:])  # the whole body, as loaded
     bitstream = proto.swap_first_pages(slot)
     chunk_count = (len(bitstream) + proto.BITSTREAM_CHUNK_MAX - 1) // proto.BITSTREAM_CHUNK_MAX
 
     transfers = []
     for offset in range(0, len(bitstream), proto.BITSTREAM_CHUNK_MAX):
         chunk = bitstream[offset : offset + proto.BITSTREAM_CHUNK_MAX]
-        transfers.append(_frame_send(chunk))
+        transfers.append(_exchange(proto.stream_send(chunk), {}))
 
     async def run():
         host = MockHost(
@@ -856,9 +887,9 @@ def test_configure_fpga_full_pass_real_bitstream():
                 _exchange(proto.ftdi_purge("rx"), {}),
                 _exchange(proto.ftdi_set_bitmode(0x00, 0x00), {}),
                 _exchange(proto.ftdi_set_bitmode(0x07, 0x01), {}),
-                _frame_send(b"\x00"),
+                *_frame_send(b"\x00"),
                 _exchange(proto.ftdi_read_pins(), {"data": b"\x00"}),  # DONE cleared
-                _frame_send(b"\x04"),
+                *_frame_send(b"\x04"),
                 _exchange(proto.ftdi_read_pins(), {"data": b"\x08"}),  # INIT high
             ]
             + transfers
@@ -866,8 +897,11 @@ def test_configure_fpga_full_pass_real_bitstream():
                 _exchange(proto.ftdi_read_pins(), {"data": b"\x10"}),  # DONE high
                 _exchange(proto.ftdi_set_bitmode(0x00, 0x00), {}),
             ]
-            + _init_transfers()
             + [
+                _exchange(proto.ftdi_set_timeouts(), {}),
+                _exchange(proto.ftdi_set_latency(), {}),
+                _exchange(proto.ftdi_set_baud(), {}),
+            ] + [
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
                 _exchange(proto.stream_send(b"\x00" * 65535), {"sent": 65535}),
@@ -876,6 +910,7 @@ def test_configure_fpga_full_pass_real_bitstream():
                 _exchange(proto.ftdi_purge("tx"), {}),
                 _exchange(proto.ftdi_purge("rx"), {}),
             ]
+            + _prime_reads()
         )
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=300.0)
@@ -1101,7 +1136,7 @@ def test_uncertain_outcome_after_dispatch():
         ):
             host = MockHost(
                 [
-                    _frame_send(proto.frame_c2(0x0000, 4)),
+                    *_frame_send(proto.frame_c2(0x0000, 4)),
                     # The status reply is the proven count+4 frame (#562).
                     _exchange(proto.stream_receive(8, 8), response),
                 ]
@@ -1173,7 +1208,7 @@ def _freq_script(channel, base=0x4F):
     # across the write and both reads. `base` lets a multi-sequence test
     # continue one Plugin's counter across its own exchanges.
     return [
-        _frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel))),
+        *_frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(channel))),
         _exact_ack(base),
         *_register_read_reply(
             proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1),
@@ -1218,7 +1253,7 @@ def test_read_frequency_paces_not_ready_gate_polls(monkeypatch):
     async def run():
         host = MockHost([
             # select write -> 3-byte ACK
-            _frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
+            *_frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
             _exact_ack(0x4F),
             # first gate read: NOT ready (payload 0x01), second: ready (0x00)
             *_register_read_reply(
@@ -1268,7 +1303,7 @@ def test_invoke_set_trigger_position():
         frames = proto.trigger_position_frames(1, 2, 100)
         host = MockHost(
             # Two writes, two ACKs: the counters step +1 (#562).
-            [_frame_send(frames[0]), _exact_ack(0x5B), _frame_send(frames[1]), _exact_ack(0x5C)]
+            [*_frame_send(frames[0]), _exact_ack(0x5B), *_frame_send(frames[1]), _exact_ack(0x5C)]
         )
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
@@ -1323,7 +1358,7 @@ def test_invoke_configure_sequencer():
         script = []
         counter = 0x40
         for register, payload, _ in plan:
-            script.append(_frame_send(proto.frame_c1(proto.wire_address(register), payload)))
+            script.extend(_frame_send(proto.frame_c1(proto.wire_address(register), payload)))
             script.append(_exact_ack(counter))
             counter += 1
         host = MockHost(script)
@@ -1610,7 +1645,7 @@ def test_class_abort_sends_stop():
         # drain outcome, and the operation still succeeds.
         host = MockHost(
             [
-                _frame_send(proto.frame_c3(0)),
+                *_frame_send(proto.frame_c3(0)),
                 _exchange(proto.stream_receive(8, None), {"data": b""}),
             ]
         )
@@ -1639,7 +1674,7 @@ def test_threshold_write_then_status_read_share_one_counter():
         code = proto.threshold_dac_code(0.0)
         host = MockHost(
             [
-                _frame_send(
+                *_frame_send(
                     proto.frame_c1(
                         proto.wire_address(proto.REGISTER_THRESHOLD_DAC),
                         proto.payload_word(code),
@@ -1809,7 +1844,7 @@ def test_counter_gate_poll_respects_interval_floor(monkeypatch):
 
         host = MockHost(
             [
-                _frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
+                *_frame_send(proto.frame_c1(proto.wire_address(proto.REG_FREQ_SELECT), proto.payload_byte(0))),
                 _exact_ack(0x4F),
                 *_register_read_reply(
                     proto.frame_c2(proto.wire_address(proto.REG_FREQ_SELECT), 1),
@@ -1872,7 +1907,7 @@ def test_configure_fpga_retries_when_done_never_asserts(monkeypatch, tmp_path):
     monkeypatch.setattr(proto, "CCF_SHA256", digest)
     blob = __import__("pathlib").Path(path).read_bytes()
     header = proto.parse_ccf_header(blob)
-    bitstream = proto.swap_first_pages(proto.extract_ccf_slot(blob, header, 0))
+    bitstream = proto.swap_first_pages(bytes(blob[header.body_offset:]))  # whole body
 
     async def run():
         host = _AdvancingPinsHost(
@@ -1907,9 +1942,11 @@ def test_configure_fpga_fails_a_short_bitstream_send(monkeypatch, tmp_path):
     monkeypatch.setattr(proto, "CCF_SHA256", digest)
     blob = __import__("pathlib").Path(path).read_bytes()
     header = proto.parse_ccf_header(blob)
-    bitstream = proto.swap_first_pages(proto.extract_ccf_slot(blob, header, 0))
+    bitstream = proto.swap_first_pages(bytes(blob[header.body_offset:]))  # whole body
     chunk_count = (len(bitstream) + proto.BITSTREAM_CHUNK_MAX - 1) // proto.BITSTREAM_CHUNK_MAX
-    assert chunk_count == 2
+    # whole body = 7*16 filler + 20000-byte slot = 20112 -> 3 chunks; the
+    # short chunk is index 1 — a FULL 10000-byte cut reporting 5000 sent
+    assert chunk_count == 3
 
     async def run():
         # Chunk 2 reports 5000 of 10000 bytes sent: the pass fails at the

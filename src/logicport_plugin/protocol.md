@@ -182,6 +182,23 @@ run the resync flush. The adapter locates the `.ccf` from the action input
 `ccf_path` or the `LOGICPORT_CCF` environment variable, verifies the
 SHA-256, and refuses any other bitstream. The file is never bundled.
 
+**Load exactly ONE image, and the default is image 7 (2026-11-06).**
+The eight slots are eight ALTERNATIVE images, not eight parts of one —
+`docs/LogicPort-Technical-Reference.md` §"The eight images, one entry each"
+(evidence current 2026-10-30) and `docs/LogicPort-Client-Guide.md`: "Load one
+image, never all eight... A single stream of the whole body faulted the
+device." Image 7 is the triggered-capture internal-clock image, "the image
+the bench used for all working captures"; image 6 is its twin; slot 0 is a
+timing mode with no established purpose.
+
+The 2026-10-29 bench addendum's "a client must load all eight slots"
+was superseded by the image matrix: `tools/full_load.c` streams the whole
+body and reaches a working dialect only because the FPGA configures on the
+LAST image it receives — slot 7. A slot-0 load asserts DONE (the FPGA
+boots) yet answers the command dialect with `EE`/`EF` filler forever
+(measured 2026-11-06: `ee`/`ef` on every read across two replugs). The
+adapter therefore keeps the single-image load and defaults `slot` to 7.
+
 Two measured facts from the bench (record addendum 76). **The serial rate
 dominates configuration, and the arithmetic is unforgiving.** At 460800 baud,
 8N1 costs ten bit times per byte, so the line carries 46,080 B/s and a

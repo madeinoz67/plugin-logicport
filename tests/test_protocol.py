@@ -309,6 +309,8 @@ def test_evidence_kind_taxonomy():
             proto.EVIDENCE_COUNTER_REBASELINED,
             proto.EVIDENCE_CAPTURE_GATE,
             proto.EVIDENCE_C3_DRAIN,
+            proto.EVIDENCE_C3_ACK,
+            proto.EVIDENCE_PRIME,
             proto.EVIDENCE_CONFIGURE_PENDING_WRITES,
             proto.EVIDENCE_FETCH_DATASET,
         }

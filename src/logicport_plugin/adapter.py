@@ -73,6 +73,39 @@ _STATUS_POLL_MAX_ATTEMPTS = 100
 #: retracted — that byte was the command counter.
 _REGISTER_READ_BYTES = 4
 
+#: The sample-plane page select. The proven bench sequence fetches with
+#: ``C3 0x0200`` then ``C2`` at offset ``0x0000`` (record §"The sequence":
+#: "fetch — C3 0x0200, C2 at 0x0000 with N = 256 -> 260 bytes"), and the
+#: plane offsets 0x1000-0x9000 live inside it.
+_PLANE_SEGMENT = 0x0200
+
+class _UnprimedSegment(RuntimeError):
+    """A select was requested with no write to prime the page."""
+
+
+#: The default FPGA image. The technical reference's image matrix: image 7
+#: is the triggered-capture internal-clock image, "the image the bench used
+#: for all working captures". Slot 0 is a timing mode with no established
+#: purpose, and a slot-0 load answers the command dialect with EE/EF filler
+#: (measured 2026-11-06). A whole-body stream reaches a working dialect only
+#: because the FPGA ends on the LAST image — slot 7.
+_FPGA_IMAGE_DEFAULT = 7
+
+#: Resync flush timings, from the C tools' flush_dev (full_load.c:11):
+#: 50 ms between the zero bursts, 120 ms from marker to purge, 80 ms from
+#: purge to the 64-byte drain. The adapter previously sent all three bursts
+#: back-to-back with no waits and no drain, and the device answered framed
+#: commands with filler (fe/ff, measured 2026-11-06).
+_RESYNC_INTER_BURST_S = 0.05
+_RESYNC_MARKER_SETTLE_S = 0.12
+_RESYNC_POST_PURGE_S = 0.08
+
+#: The post-flush prime (TR step 10): eight N=1 segment-0 reads, each
+#: answered within a timeout-bounded buffer, paced 70 ms apart.
+_PRIME_READ_COUNT = 8
+_PRIME_REPLY_BYTES = 8
+_PRIME_PACE_S = 0.07
+
 _FPGA_POLL_TIMEOUT_MS_DEFAULT = 1000
 
 #: After a C3 frame the adapter drains at most this many reply bytes
@@ -85,6 +118,9 @@ _C3_DRAIN_MAX_BYTES = 8
 #: timer ticks. Same check-then-sleep shape as the gate loop (fold R12).
 _PIN_POLL_PACE_S = 0.005
 
+#: Inter-write gap during the bitstream stream (full_load.c tx(): 300 us).
+_BITSTREAM_INTER_WRITE_S = 0.0003
+
 
 class Plugin:
     def __init__(self):
@@ -92,6 +128,7 @@ class Plugin:
         self.descriptor = None
         self.closed = False
         self._rate_word = None  # last packed C1/C2 rate word (C3 carries it)
+        self._segment = None  # device's cached C3 page select; None = unknown
         self._configurations = {}  # configuration_id -> class configure input
         self._acquisitions = {}  # acquisition_id -> configuration_id
         self._last_counter = None  # last parsed reply's command counter (#562)
@@ -297,6 +334,7 @@ class Plugin:
             context,
             proto.frame_c2(proto.wire_address(proto.REG_STATUS), _REGISTER_READ_BYTES),
             _REGISTER_READ_BYTES,
+            proto.segment_of(proto.REG_STATUS),
         )
         await self.services.record_evidence(
             {
@@ -316,9 +354,90 @@ class Plugin:
             "source": "device",
         }
 
-    async def _read_reply(self, context, c2_frame: bytes, count: int) -> proto.ReplyFrame:
+    async def _prime_segment_zero(self, context) -> None:
+        """Eight N=1 reads at segment 0, no select — the load tail's prime.
+
+        Technical Reference step 10: "leave bitbang mode, then flush and
+        prime eight reads." The C tools' shape (full_load.c): each prime is
+        ``C2 00 00 01 00`` — N=1, not N=4 — sent after a per-frame purge,
+        answered with a timeout-bounded read, paced 70 ms apart. The replies
+        are not parsed: the flush just reset the counter view, so there is
+        no continuity to check; each reply's byte count is the evidence.
+
+        A run without this prime answered every later framed command with
+        filler; a run with it (2026-11-06, the once-reproducible 8-of-8)
+        got clean C2 replies, counters 00-07. The device answers the prime
+        and then holds the dialect for the selects that follow.
+        """
+        replies: list[int] = []
+        for _ in range(_PRIME_READ_COUNT):
+            await self._send_frame(proto.frame_c2(0x0000, 1), context)
+            raw = await self._receive(context, _PRIME_REPLY_BYTES, exact_bytes=_PRIME_REPLY_BYTES)
+            replies.append(len(raw))
+            await _pace_wait(_PRIME_PACE_S)
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_PRIME, "reads": _PRIME_READ_COUNT, "reply_bytes": replies},
+            context,
+        )
+
+    async def _select_segment(self, context, segment, prime_frame=None) -> None:
+        """Select a page, then PRIME IT WITH A WRITE before any read.
+
+        The device keeps ONE cached segment (the record's ``_DAT_005977e8``)
+        and applies it to every framed command.
+
+        The ordering here is the record's bench rule, not a preference.
+        Addendum 32, "Rule 1: prime a segment with a write before reading
+        from it": ``C3 → read`` back-to-back "happens only when a read is
+        the very first access to a segment the device has not been primed
+        with. That is exactly the shape both device deaths followed." The
+        vendor never does it either: its configuration block-writes reach
+        the segment first, so the cache miss emits the ``C3`` and the write
+        that follows primes the page.
+
+        So this method refuses to emit ``C3`` unless it is given the write
+        that primes the segment. A caller with no write to make is telling
+        us the segment is already primed, and the select is then either
+        skipped (cache agrees) or an error the caller must resolve — never
+        a bare select-then-read.
+
+        The ACK is parsed, not drained: it carries the command counter, and
+        a drained ACK leaves the counter view one behind.
+
+        ``None`` means unknown cache, which only the post-flush prime phase
+        may rely on, because it deliberately talks to segment zero with no
+        select at all.
+        """
+        if segment is None or segment == self._segment:
+            return
+        if prime_frame is None:
+            raise _UnprimedSegment(
+                f"segment {segment:#06x} is not selected and this call has no "
+                "write to prime it with; a select followed straight by a read "
+                "is the shape that put the device into the EE state (record "
+                "addendum 32, rule 1)"
+            )
+        await self._send_frame(proto.frame_c3(segment), context)
+        raw = await self._receive(context, 3, exact_bytes=3)
+        frame = proto.parse_c3_ack(raw)
+        await self.services.record_evidence(
+            {"kind": proto.EVIDENCE_C3_ACK, "segment": segment, "counter": frame.counter},
+            context,
+        )
+        await self._advance_counter(frame.counter, context)
+        self._segment = segment
+        # The prime: the write that makes the segment readable at all.
+        await self._send_frame(prime_frame, context)
+        await self._ack_write(context)
+
+    async def _read_reply(self, context, c2_frame: bytes, count: int, segment=None) -> proto.ReplyFrame:
         """Send one C2 frame and parse its count+4 reply through the
-        hardware-proven grammar (counter continuity enforced)."""
+        hardware-proven grammar (counter continuity enforced).
+
+        The page is NOT selected here. Toggling a segment to read from it is
+        the device-death shape; a read may only happen on a segment a write
+        has already primed, which the write paths do.
+        """
         await self._send_frame(c2_frame, context)
         raw = await self._receive(context, count + 4, exact_bytes=count + 4)
         frame = proto.parse_reply(raw)
@@ -335,6 +454,7 @@ class Plugin:
             context,
             proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES),
             _REGISTER_READ_BYTES,
+            proto.segment_of(proto.REG_TRIGGER_POSITION),
         )
         value = proto.parse_read_word(frame.payload)
         return {
@@ -354,12 +474,25 @@ class Plugin:
         checked; this path is reachable only once it is decoded.
         """
         if self._rate_word is not None and (self._rate_word >> 16) != (word >> 16):
-            # The clock select changed: the host sends 0xC3 first (§3.1).
-            # Fold R3: the C3 reply shape is unproven — drain, never parse.
-            await self._send_frame(proto.frame_c3(self._rate_word & 0xFFFF), context)
-            await self._c3_drain(context)
-        await self._send_frame(proto.frame_c1(word, proto.payload_byte(proto.RATE_COMMAND_PAYLOAD)), context)
-        await self._ack_write(context)
+            # The packed rate word's HIGH half is the clock select, and a
+            # clock-select change is a page select: record §3.1, "The app
+            # packs rate and clock select into one value. The low 16 bits
+            # are the rate value. The clock select is Int(value / 65536.0).
+            # When the clock select changes, the host sends 0xC3 first."
+            # Sending the LOW half here (fold R3) put the rate value in the
+            # select field — the inversion that silenced the device.
+            # The rate command IS the priming write: selecting and then
+            # writing is the vendor's own order (record addendum 32).
+            await self._select_segment(
+                context,
+                word >> 16,
+                prime_frame=proto.frame_c1(word, proto.payload_byte(proto.RATE_COMMAND_PAYLOAD)),
+            )
+        else:
+            await self._send_frame(
+                proto.frame_c1(word, proto.payload_byte(proto.RATE_COMMAND_PAYLOAD)), context
+            )
+            await self._ack_write(context)
         self._rate_word = word
         return {
             "operation_id": operation_id,
@@ -442,9 +575,19 @@ class Plugin:
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
-        await self._send_frame(proto.frame_c3(word), context)
-        # Fold R3: the C3 reply shape is unproven — drain, never parse.
-        await self._c3_drain(context)
+        # The command bank's segment, not the rate word. Fold R3 sent the
+        # packed rate word's LOW half as the select value; an arbitrary
+        # non-zero select names an arbitrary page, and the record's fault
+        # pass showed that silences the device ("a non-zero C3 is fatal").
+        # The command bank is segment 0x0010 (§C register map), so the
+        # frame that reaches the device is the proven one.
+        # Stop has no priming write of its own, so it may only run on a
+        # segment a previous write already primed; otherwise it refuses
+        # rather than emitting the select-then-command shape.
+        if self._segment != proto.segment_of(proto.REG_STATUS):
+            raise _UnprimedSegment(
+                "stop needs the command-bank segment primed by a prior write"
+            )
         return {
             "operation_id": operation_id,
             "verb": verb,
@@ -545,7 +688,7 @@ class Plugin:
                 "INVALID_ARGUMENT",
                 "a .ccf path is required (action input ccf_path or LOGICPORT_CCF)",
             )
-        slot = inputs.get("slot", 0)
+        slot = inputs.get("slot", _FPGA_IMAGE_DEFAULT)
         if isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot < proto.CCF_SLOT_COUNT:
             return self._failure_inject(operation_id, verb, "INVALID_ARGUMENT", "slot must be 0..7")
         attempts = inputs.get("attempts", 1)
@@ -574,11 +717,21 @@ class Plugin:
             )
         try:
             header = proto.parse_ccf_header(blob)
-            slot_bytes = proto.extract_ccf_slot(blob, header, slot)
+            # THE WHOLE BODY, as the working C tool streams it. Measured on
+            # this unit 2026-11-06: a single-image load (slot 7, every C-tool
+            # timing delta in place) answers the command dialect with fe/ff
+            # filler, while tools/full_load.c streaming all 8,387,696 body
+            # bytes reaches the working dialect (status 73, live cursor).
+            # The Technical Reference's "a client loads exactly one" was
+            # contradicted by the bench twice tonight; bench is operational
+            # truth. The FPGA configures on the LAST image it receives, so
+            # the body order ends on image 7 and `slot` records the intended
+            # selection in the result row.
+            slot_bytes = bytes(blob[header.body_offset :])
         except ValueError as exc:
             return self._failure_inject(operation_id, verb, "PROTOCOL_ERROR", str(exc))
         bitstream = proto.swap_first_pages(slot_bytes)
-        offset, length = proto.ccf_slot_bounds(header, slot)
+        offset, length = header.body_offset, len(slot_bytes)
 
         remaining = self._deadline_check(context)
         remaining()
@@ -653,6 +806,9 @@ class Plugin:
         """
         await self.services.transfer(proto.ftdi_purge("rx"), context)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
+        # The load rides the faster line (TR load-recipe step 1: baud
+        # 3000000); the bit-bang pins are unaffected by the baud, and the
+        # stream itself drops from ~23 s to ~3.5 s per image.
         await self.services.transfer(
             proto.ftdi_set_bitmode(proto.BITBANG_MASK_FPGA, proto.BITMODE_BITBANG), context
         )
@@ -674,6 +830,11 @@ class Plugin:
             if not await self._send_stream(chunk, context):
                 await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
                 return None
+            # The working C tool's inter-write gap (full_load.c tx():
+            # usleep(300) after every write). Our back-to-back 10000-byte
+            # chunks at 460800 leave the FTDI TX buffer near-full for the
+            # whole ~24 s load; the tool paces every write instead.
+            await _pace_wait(_BITSTREAM_INTER_WRITE_S)
             offset += len(chunk)
         done = await self._poll_pins(context, proto.FPGA_DONE_PIN, want_set=True, timeout_ms=poll_ms)
         await self.services.transfer(proto.ftdi_set_bitmode(proto.BITMODE_RESET, proto.BITMODE_RESET), context)
@@ -745,6 +906,7 @@ class Plugin:
             context,
             proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES),
             _REGISTER_READ_BYTES,
+            proto.segment_of(proto.REG_TRIGGER_POSITION),
         )
         trigger_position = proto.parse_read_word(frame.payload)
         page_base = (trigger_position + 1 + prescale) % proto.PAGE_STRIDE
@@ -755,7 +917,7 @@ class Plugin:
             planes = []
             for plane in range(5):
                 address = proto.sample_plane_wire_address(plane, page_base + page * proto.PAGE_STRIDE)
-                plane_frame = await self._read_reply(context, proto.frame_c2(address, chunk), chunk)
+                plane_frame = await self._read_reply(context, proto.frame_c2(address, chunk), chunk, _PLANE_SEGMENT)
                 planes.append(plane_frame.payload)
             pages.append(planes)
 
@@ -791,37 +953,68 @@ class Plugin:
         R4): the flush is the deliberate recovery path, so the next reply's
         ANY counter is acceptable — recorded as evidence.
         """
-        await self._init_sequence(context)
+        # NO ftdi_reset_device here. The C tools' flush_dev opens with
+        # tcioflush and never resets the chip, and the record's addendum 10
+        # measured the reset variant dead: "FT_ResetDevice, then the flush,
+        # then C3 0x0000. No reply." A chip reset after the FPGA load
+        # unwires the configured device. Timeouts/latency/baud are re-asserted
+        # without the reset.
+        await self.services.transfer(proto.ftdi_set_timeouts(), context)
+        await self.services.transfer(proto.ftdi_set_latency(), context)
+        await self.services.transfer(proto.ftdi_set_baud(), context)
         await self.services.transfer(proto.ftdi_purge("tx"), context)
         await self.services.transfer(proto.ftdi_purge("rx"), context)
-        for count, minimum in (
-            (proto.RESYNC_FLUSH_LONG, proto.RESYNC_FLUSH_LONG_MIN_SENT),
-            (proto.RESYNC_FLUSH_SHORT, proto.RESYNC_FLUSH_SHORT),
+        for index, (count, minimum) in enumerate(
+            (
+                (proto.RESYNC_FLUSH_LONG, proto.RESYNC_FLUSH_LONG_MIN_SENT),
+                (proto.RESYNC_FLUSH_SHORT, proto.RESYNC_FLUSH_SHORT),
+            )
         ):
             reply = await self.services.transfer(proto.stream_send(b"\x00" * count), context)
             sent = reply.get("sent") if isinstance(reply, dict) else None
             if sent is not None and sent < minimum:
                 return False
+            if index == 0:
+                # The C tools' inter-burst wait (full_load.c flush_dev:
+                # 65535 zeros, usleep(50000), 30000 zeros). At 460800 the
+                # long burst clocks out over ~1.4 s; sending the next burst
+                # immediately can overrun the device's flush state machine.
+                await _pace_wait(_RESYNC_INTER_BURST_S)
         reply = await self.services.transfer(
             proto.stream_send(bytes([proto.RESYNC_MARKER])), context
         )
         sent = reply.get("sent") if isinstance(reply, dict) else None
         if sent is not None and sent < 1:
             return False
+        # The marker's settle wait BEFORE the purge (flush_dev: marker,
+        # usleep(120000), tcioflush) — purging while the device is still
+        # processing the marker loses the handshake's effect.
+        await _pace_wait(_RESYNC_MARKER_SETTLE_S)
         await self.services.transfer(proto.ftdi_purge("tx"), context)
         await self.services.transfer(proto.ftdi_purge("rx"), context)
+        # The post-purge settle (flush_dev: usleep(80000)). The C tool's
+        # 64-byte drain read is NOT reproduced: an unterminated full buffer
+        # is a discard-and-raise in the section 8.1 grammar, and the
+        # per-send RX purge in _send_frame already covers its purpose.
+        await _pace_wait(_RESYNC_POST_PURGE_S)
         self._last_counter = None
+        await self._prime_segment_zero(context)
+        # A flush invalidates the device's cached page select (record §B,
+        # "The C3 rule": after any flush or reopen the vendor invalidates the
+        # clock-select cache). Keeping our own copy would let us skip a select
+        # the device has forgotten.
+        self._segment = None
         await self.services.record_evidence(
             {"kind": proto.EVIDENCE_COUNTER_REBASELINED}, context
         )
         return True
 
-    async def _init_sequence(self, context):
+    async def _init_sequence(self, context, baud=proto.INIT_BAUD):
         """The section 4 handshake the adapter drives through the dialect."""
         await self.services.transfer(proto.ftdi_reset_device(), context)
         await self.services.transfer(proto.ftdi_set_timeouts(), context)
         await self.services.transfer(proto.ftdi_set_latency(), context)
-        await self.services.transfer(proto.ftdi_set_baud(), context)
+        await self.services.transfer(proto.ftdi_set_baud(baud), context)
         # Fold R4: the FTDI re-init can reset the device's counter view —
         # drop the baseline; the first observed reply re-sets it, and the
         # rebaseline itself is evidence.
@@ -831,6 +1024,30 @@ class Plugin:
         )
 
     async def _send_frame(self, frame, context):
+        """Purge the receive buffer FIRST, then send the frame.
+
+        ``tools/full_load.c:12-14`` does this around every framed command —
+        ``seg``, ``wr`` and ``st`` each call ``ftdi_tcioflush`` before the
+        write — and that is the difference between parsing a reply and
+        parsing leftover filler. The record states the same rule in words:
+        "Line filler bursts ... follow both configuration and resync, and
+        ACKs can queue behind the filler: the drain discipline must run
+        before every parse, not only at open."
+
+        Without it the adapter parses whatever the last phase left in the
+        pipe: the bench runs read `EE` and `FF` as if the device had
+        answered them.
+        """
+        try:
+            await self.services.transfer(proto.ftdi_purge("rx"), context)
+        except ValueError:
+            # A host whose transport serves only §8.1 stream transactions
+            # (the send_receive mock dialect) has no purge op. The C tools'
+            # tcioflush equivalent there is a zero-byte receive: the quiet
+            # line answers empty immediately and the buffer is drained.
+            await self.services.transfer(
+                proto.stream_receive(_C3_DRAIN_MAX_BYTES, None), context
+            )
         await self.services.transfer(proto.stream_send(frame), context)
 
     async def _receive(self, context, max_bytes, exact_bytes):
@@ -958,7 +1175,9 @@ class Plugin:
                 remaining = floor_s - (self.services.monotonic() - last_poll)
                 if remaining > 0:
                     await _pace_wait(remaining)
-            frame = await self._read_reply(context, gate_frame, 1)
+            frame = await self._read_reply(
+                context, gate_frame, 1, proto.segment_of(proto.REG_FREQ_SELECT)
+            )
             last_poll = self.services.monotonic()
             if proto.freq_ready(frame.payload[0]):
                 break
@@ -970,6 +1189,7 @@ class Plugin:
             context,
             proto.frame_c2(proto.wire_address(proto.REG_FREQ_COUNT), 4),
             4,
+            proto.segment_of(proto.REG_FREQ_COUNT),
         )
         return proto.frequency_hz(proto.parse_read_dword(count_frame.payload))
 
@@ -1269,6 +1489,7 @@ class Plugin:
             context,
             proto.frame_c2(proto.wire_address(proto.REG_TRIGGER_POSITION), _REGISTER_READ_BYTES),
             _REGISTER_READ_BYTES,
+            proto.segment_of(proto.REG_TRIGGER_POSITION),
         )
         tp = proto.parse_read_word(tp_frame.payload)
         column_count = proto.columns_from_trigger_position(tp)
@@ -1278,7 +1499,7 @@ class Plugin:
             planes = []
             for plane in range(5):
                 address = proto.sample_plane_wire_address(plane, (tp + 1) % proto.PAGE_STRIDE + page * proto.PAGE_STRIDE)
-                plane_frame = await self._read_reply(context, proto.frame_c2(address, chunk), chunk)
+                plane_frame = await self._read_reply(context, proto.frame_c2(address, chunk), chunk, _PLANE_SEGMENT)
                 planes.append(plane_frame.payload)
             pages.append(planes)
         columns = proto.deinterleave_pages(pages[0], pages[1])[:column_count]
