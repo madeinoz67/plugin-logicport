@@ -28,3 +28,7 @@
 
 - [x] Rate decoded: the rate is the clock bank's two row bytes (TR rate
       table), not a packed word; rate_hz parameter lands in the descriptor
+
+- [x] Capture engine proven outside the SDK: the Client Guide's full
+      sequence (disarm/enable, fill-limit pages 0x0020/0x0040, tail 0x000D,
+      exit-prefill 0x000A) runs the cursor; unconfigure-before-load added

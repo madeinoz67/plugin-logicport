@@ -21,5 +21,12 @@
       row of the 20-row clock table (TR) and writes bytes A/B to the clock
       bank via select-and-prime; descriptor + all pins repinned; suite
       138/2, check/check-ui/verify-ui all 0
-- [ ] When PR-7 lands: re-run the recorder against it (no plugin change
-      needed if purge semantics hold); then Phase 3 vectors rebuild
+- [x] Client Guide section 6 ported to pyftdi_full_load.py chain: the
+      engine RUNS (cursor advances and wraps, exit-prefill completes,
+      cursor-relative fetch returns 256B) - full_load's static cursor was
+      the missing 0x000A exit-prefill write
+- [ ] D0 window reads idle-flat (bf every byte): fetch the full 2048B ring
+      and the before-cursor region; verify the 100 Hz D0 / 14 kHz counter
+      signals land in the window
+- [ ] When PR-7 lands: re-run the recorder against it; then Phase 3 vectors
+      rebuild
