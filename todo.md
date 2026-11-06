@@ -9,5 +9,10 @@
       the once-only prime result, driver-layer hypothesis named
 - [x] Fork DISSOLVED by measurement: pyftdi_full_load.py talks (counters
       00-08) - driver exonerated, fault is the SDK transport wrapping
-- [ ] Bisect SDK transport vs pyftdi_full_load.py: timeouts, establish
-      init, chunk size, post-flush 64-byte drain (addendum 78)
+- [x] Bisect round 1 DONE: ring-purge defect isolated (purge clears the
+      FTDI buffer, not the SerialLink ring); filed SDK-side on #589
+      (comment 6687332643); d9 carries it as PR-7 behind PR-1 with a
+      reader-quiesce arm. Plugin-side drain loop reverted - grammar and
+      mock both refuse a healthy starved drain; suite back to 138/2
+- [ ] When PR-7 lands: re-run the recorder against it (no plugin change
+      needed if purge semantics hold); then Phase 3 vectors rebuild

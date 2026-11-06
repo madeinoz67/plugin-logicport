@@ -993,9 +993,13 @@ class Plugin:
         await self.services.transfer(proto.ftdi_purge("tx"), context)
         await self.services.transfer(proto.ftdi_purge("rx"), context)
         # The post-purge settle (flush_dev: usleep(80000)). The C tool's
-        # 64-byte drain read is NOT reproduced: an unterminated full buffer
-        # is a discard-and-raise in the section 8.1 grammar, and the
-        # per-send RX purge in _send_frame already covers its purpose.
+        # 64-byte drain is NOT plugin-side here, deliberately: the filler
+        # that needs draining lives in the HOST's receive ring (the reader
+        # thread fills it through the bitbang-mode load), the section 8.1
+        # grammar cannot express a healthy starved drain, and the mock
+        # models any scripted receive exception as a permanent fault. The
+        # ring purge belongs to the SDK transport - filed as an SDK-side
+        # row on #589 (addendum 78 names the evidence).
         await _pace_wait(_RESYNC_POST_PURGE_S)
         self._last_counter = None
         await self._prime_segment_zero(context)
