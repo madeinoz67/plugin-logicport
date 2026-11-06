@@ -1,9 +1,9 @@
 {
-  "contract_version": "0.5.0",
+  "contract_version": "0.6.0",
   "profile_ids": [
     "otdp.logic_analyser/1.0.0"
   ],
-  "reference_version": "0.5.0",
+  "reference_version": "0.6.0",
   "deviations": [
     {
       "expectation_id": "otdp.logic_analyser.configure/1.0.0",

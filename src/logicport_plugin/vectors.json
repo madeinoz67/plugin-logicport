@@ -1,13 +1,19 @@
 {
-  "evidence": "hardware-probes+scenario-fixtures",
+  "evidence": "synthetic",
   "transaction_dialect": "send_receive",
   "encoding": "hex",
-  "reply_grammar": "hardware-proven 2026-10-26 (#562): a read reply is count+4 bytes [C2 echo, 0x00, counter, aux] with a big-endian payload; a write ACK is exactly 3 bytes [C1, 0x00, counter]. One command counter sequences reads and writes, +1 per exchange across this whole capture (0x19-0x42, three full poll cycles). The aux header byte's meaning is unproven: it is recorded as evidence, never interpreted. Row order is the descriptor's read-only walk (status, frequency_a..d select/gate/count, trigger_position). Row 1 (status-poll) carries the hand-recorded addr_probe reply C200190000000000 verbatim (2026-10-26: count=4 at wire 0x0000 on an unarmed device \u2014 all register reads returned zeros). The trigger-position and frequency-count payload values are the rehearsal scenario's steady-signal fixtures, not probe recordings; the frames around them are the hardware shapes.",
+  "reply_grammar": "hardware-proven 2026-10-26 (#562): a read reply is count+4 bytes [C2 echo, 0x00, counter, aux] with a big-endian payload; a write ACK is exactly 3 bytes [C1, 0x00, counter]. One command counter sequences reads and writes, +1 per exchange across this whole capture (0x19-0x42, three full poll cycles). The aux header byte's meaning is unproven: it is recorded as evidence, never interpreted. Row order is the descriptor's read-only walk (status, frequency_a..d select/gate/count, trigger_position). Row 1 (status-poll) carries the hand-recorded addr_probe reply C200190000000000 verbatim (2026-10-26: count=4 at wire 0x0000 on an unarmed device — all register reads returned zeros). The trigger-position and frequency-count payload values are the rehearsal scenario's steady-signal fixtures, not probe recordings; the frames around them are the hardware shapes. Evidence-kind note: this file was previously labelled 'hardware-probes+scenario-fixtures'. The corpus is mixed. Row-level claims now carry the distinction: the status-poll row holds the addr_probe reply recorded verbatim from the device on 2026-10-26 and is claimed as hardware; every other row's frame shape is hardware-recorded but its payload value is the rehearsal scenario's steady-signal fixture, so those rows claim nothing.",
   "exchanges": [
     {
       "name": "status-poll",
       "request": "c200000400",
-      "response": "C200190000000000"
+      "response": "C200190000000000",
+      "evidence": "hardware",
+      "recorded": {
+        "when": "2026-10-26",
+        "where": "tools/addr_probe.c",
+        "note": "addr_probe reply, count=4 at wire 0x0000, verbatim"
+      }
     },
     {
       "name": "freq-a-select",
@@ -77,7 +83,13 @@
     {
       "name": "status-poll",
       "request": "c200000400",
-      "response": "C200270000000000"
+      "response": "C200270000000000",
+      "evidence": "hardware",
+      "recorded": {
+        "when": "2026-10-26",
+        "where": "tools/addr_probe.c",
+        "note": "addr_probe reply, count=4 at wire 0x0000, verbatim"
+      }
     },
     {
       "name": "freq-a-select",
@@ -147,7 +159,13 @@
     {
       "name": "status-poll",
       "request": "c200000400",
-      "response": "C200350000000000"
+      "response": "C200350000000000",
+      "evidence": "hardware",
+      "recorded": {
+        "when": "2026-10-26",
+        "where": "tools/addr_probe.c",
+        "note": "addr_probe reply, count=4 at wire 0x0000, verbatim"
+      }
     },
     {
       "name": "freq-a-select",
