@@ -22,3 +22,6 @@
 
 - [x] pyftdi_full_load.py: device answers in dialect through pyftdi alone
       (addendum 78) - driver-layer hypothesis overturned, fork dissolved
+
+- [x] set_trigger decoded: mask A/B destinations pinned from full_load.c's
+      proven chain; the writes now select-and-prime segment 0x0100

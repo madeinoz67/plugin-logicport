@@ -439,9 +439,32 @@ def test_c3_ack_is_parsed_and_advances_the_counter():
     asyncio.run(run())
 
 
-def test_invoke_set_trigger_refuses_open_registers():
+def test_invoke_set_trigger_sends_the_proven_chain():
+    """The masks are decoded (full_load.c: seg 0x0100, offsets 0x0003/0x0008)
+    and the writes go through the selecting priming write — select, mask A,
+    mask B, each ACKed, counters stepping +1."""
     async def run():
-        host = MockHost([])
+        host = MockHost(
+            [
+                _exchange(proto.ftdi_purge("rx"), {}),
+                _exchange(proto.stream_send(bytes([0xC3, 0x00, 0x01, 0x00, 0x00])), {}),
+                _exchange(proto.stream_receive(3, 3), {"data": b"\xc3\x00\x5a"}),
+                *_frame_send(
+                    proto.frame_c1(
+                        proto.wire_address(proto.REGISTER_TRIGGER_MASK_A),
+                        proto.trigger_mask_payload(1),
+                    )
+                ),
+                _exact_ack(0x5B),
+                *_frame_send(
+                    proto.frame_c1(
+                        proto.wire_address(proto.REGISTER_TRIGGER_MASK_B),
+                        proto.trigger_mask_payload(2),
+                    )
+                ),
+                _exact_ack(0x5C),
+            ]
+        )
         plugin = create_plugin()
         context = MockContext("op-1", deadline_monotonic=1.0)
         await plugin.open(_descriptor(), host, context)
@@ -450,10 +473,11 @@ def test_invoke_set_trigger_refuses_open_registers():
         )
         result = await plugin.execute(request, context)
         validate_result(result, request)
-        assert result["status"] == "error"
-        assert result["error"]["code"] == "UNSUPPORTED"
-        assert result["error"]["dispatch_state"] == "not_dispatched"
-        # A mask that does not fit 34 bits is INVALID_ARGUMENT.
+        assert result["status"] == "ok", result
+        assert result["data"]["result"]["frames_sent"] == 2
+        host.assert_complete()
+        # A mask that does not fit 34 bits is INVALID_ARGUMENT (no dispatch,
+        # nothing scripted — the mock must stay complete).
         bad = _request(
             "invoke",
             {"action_id": "set_trigger", "input": {"mask_a": 1 << 34, "mask_b": 0}},

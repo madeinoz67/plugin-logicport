@@ -380,7 +380,7 @@ class Plugin:
             context,
         )
 
-    async def _select_segment(self, context, segment, prime_frame=None) -> None:
+    async def _select_segment(self, context, segment, prime_frame=None, reprime_frame=None) -> None:
         """Select a page, then PRIME IT WITH A WRITE before any read.
 
         The device keeps ONE cached segment (the record's ``_DAT_005977e8``)
@@ -429,6 +429,9 @@ class Plugin:
         # The prime: the write that makes the segment readable at all.
         await self._send_frame(prime_frame, context)
         await self._ack_write(context)
+        if reprime_frame is not None:
+            await self._send_frame(reprime_frame, context)
+            await self._ack_write(context)
 
     async def _read_reply(self, context, c2_frame: bytes, count: int, segment=None) -> proto.ReplyFrame:
         """Send one C2 frame and parse its count+4 reply through the
@@ -612,24 +615,26 @@ class Plugin:
                 return self._failure_inject(
                     operation_id, verb, "INVALID_ARGUMENT", "trigger masks must fit 34 bits"
                 )
-        if proto.REGISTER_TRIGGER_MASK_A is None or proto.REGISTER_TRIGGER_MASK_B is None:
-            return self._failure_inject(
-                operation_id,
-                verb,
-                "UNSUPPORTED",
-                "trigger-mask destination registers are not decoded "
-                "(LogicPort-Protocol.md section 5a open item)",
-            )
         remaining = self._deadline_check(context)
         remaining()
         await context.mark_dispatch_started()
-        for register, mask in (
-            (proto.REGISTER_TRIGGER_MASK_A, mask_a),
-            (proto.REGISTER_TRIGGER_MASK_B, mask_b),
-        ):
-            word = proto.wire_address(register)
-            await self._send_frame(proto.frame_c1(word, proto.trigger_mask_payload(mask)), context)
-            await self._ack_write(context)
+        # The mask page is selected FIRST and the writes prime it — the
+        # record's order (masks are the first framed block after the prime,
+        # "C3 0x0100, write mask A at 0x0003, mask B at 0x0008") and
+        # addendum 32's rule: the select is followed by the segment's own
+        # writes, never by a read.
+        await self._select_segment(
+            context,
+            proto.segment_of(proto.REGISTER_TRIGGER_MASK_A),
+            prime_frame=proto.frame_c1(
+                proto.wire_address(proto.REGISTER_TRIGGER_MASK_A),
+                proto.trigger_mask_payload(mask_a),
+            ),
+            reprime_frame=proto.frame_c1(
+                proto.wire_address(proto.REGISTER_TRIGGER_MASK_B),
+                proto.trigger_mask_payload(mask_b),
+            ),
+        )
         return {
             "operation_id": operation_id,
             "verb": verb,

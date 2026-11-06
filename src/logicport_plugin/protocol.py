@@ -153,9 +153,14 @@ PAGE_BYTES = 4096
 #: 0x100008 (2^20+8) — the same slot digest that fixed the
 #: trigger-position writes at 0x100004/0x100006.
 REGISTER_THRESHOLD_DAC: int | None = 0x100008
-#: usbWrite40 destinations of the trigger masks (Protocol §5a).
-REGISTER_TRIGGER_MASK_A: int | None = None
-REGISTER_TRIGGER_MASK_B: int | None = None
+#: usbWrite40 destinations of the trigger masks. CLOSED from the bench's
+#: proven configure chain (tools/full_load.c, record "The sequence":
+#: "masks — C3 0x0100, write mask A at 0x0003, mask B at 0x0008"): mask A
+#: is segment 0x0100 offset 0x0003, mask B the same segment offset 0x0008,
+#: each a five-byte usbWrite40 payload (34 channel bits, all-ones proven
+#: as FF FF FF FF 3F).
+REGISTER_TRIGGER_MASK_A: int | None = 0x01000003
+REGISTER_TRIGGER_MASK_B: int | None = 0x01000008
 #: The 1-byte usbWriteByte payload of the C1 rate command (Protocol §5
 #: step 13 routes it through FUN_004ca679); its value is not decoded.
 RATE_COMMAND_PAYLOAD: int | None = None

@@ -282,11 +282,12 @@ def test_ftdi_control_dialect():
 
 
 def test_open_slots_state():
-    # Threshold decoded (0x100008); the mask and rate-payload slots stay
-    # open and the matching operations refuse while they are None.
+    # Threshold decoded (0x100008); the masks decoded from the bench's
+    # proven configure chain (full_load.c: segment 0x0100, offsets 0x0003
+    # and 0x0008). The rate-payload slot stays open and rate_word refuses.
     assert proto.REGISTER_THRESHOLD_DAC == 0x100008
-    assert proto.REGISTER_TRIGGER_MASK_A is None
-    assert proto.REGISTER_TRIGGER_MASK_B is None
+    assert proto.REGISTER_TRIGGER_MASK_A == 0x01000003
+    assert proto.REGISTER_TRIGGER_MASK_B == 0x01000008
     assert proto.RATE_COMMAND_PAYLOAD is None
 
 

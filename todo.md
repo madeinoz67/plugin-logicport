@@ -14,5 +14,8 @@
       (comment 6687332643); d9 carries it as PR-7 behind PR-1 with a
       reader-quiesce arm. Plugin-side drain loop reverted - grammar and
       mock both refuse a healthy starved drain; suite back to 138/2
+- [x] Trigger-mask slots pinned from the proven chain (0x01000003/0x01000008,
+      seg 0x0100); set_trigger un-refused through the selecting priming
+      write; suite 138/2, check exit 0
 - [ ] When PR-7 lands: re-run the recorder against it (no plugin change
       needed if purge semantics hold); then Phase 3 vectors rebuild
