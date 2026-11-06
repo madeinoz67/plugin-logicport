@@ -255,3 +255,37 @@ def test_pinned_profile_conforms_to_the_catalog_schema():
             f"{row['path']} does not conform to the catalog schema: "
             + "; ".join(f"{list(e.path)}: {e.message}" for e in errors[:5])
         )
+
+
+def test_pinned_catalog_describes_this_plugin():
+    """The pinned catalog's cross-references resolve inside itself.
+
+    ``test_pinned_profile_conforms_to_the_catalog_schema`` proves each row is
+    well formed. JSON Schema cannot express the property that matters next:
+    that a profile's ``required_actions`` and ``optional_actions`` name rows
+    that exist. A catalog shrunk to one action with three dangling ids
+    validates clean, so shape conformance alone would pass a catalog that
+    describes nothing. This is that missing property.
+    """
+    descriptor = _descriptor()
+    pinned = {row["path"] for row in descriptor["contracts"]}
+    assert "logicport-profile.json" in pinned, "the catalog contract row is gone"
+
+    catalog = json.loads(_package_bytes("logicport-profile.json"))
+    actions = catalog["actions"]
+    assert actions, "a catalog with no actions describes nothing"
+
+    for profile in catalog["profiles"]:
+        for field in ("required_actions", "optional_actions"):
+            for action_id in profile.get(field) or []:
+                assert action_id in actions, (
+                    f"profile {profile['id']} names {action_id!r} in {field}, "
+                    f"but no such action row exists"
+                )
+
+    declared = set(descriptor.get("profiles") or [])
+    for profile in catalog["profiles"]:
+        assert profile["id"] in declared, (
+            f"the catalog describes profile {profile['id']!r}, which the "
+            "descriptor does not declare"
+        )
