@@ -36,7 +36,7 @@ GOLDEN_ADDR_PROBE_REPLY = bytes.fromhex("C200190000000000")
 #: Regenerating the corpus is a deliberate, reviewed edit — the pin changes
 #: only when this constant is re-derived alongside it (fold R9).
 VECTORS_EXCHANGES_SHA256 = (
-    "c7adf83b8e80de3efcabebaef9c3b7510f7b76fa5e59eeae749e2a3b2dab009b"
+    "10b60b61500d69af4a7839afe6a352332da35508f3416071cb064305f6491c32"
 )
 
 
