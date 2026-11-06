@@ -35,9 +35,9 @@
       vendor writes it after a close/reopen; proven 2026-10-28, ACK C1 00
       01, LED ON); addendum 76's fault is the SAME byte to 0x0010_0000
       (status). One register apart. Constants renamed in protocol.py
-- [ ] Bench go (principal): add close/reopen + ENGINE_ENABLE (0x61 ->
-      0x0100_0000) to the chain prover before arm; expect pre-fill to run
-      and D0's 100 Hz in the window [memory files written 2026-11-07:
-      0x61 two-registers note + exit-prefill chain note]
+- [ ] Bench go (principal): the enable is STAGED behind --enable in
+      pyftdi_full_load.py (close/reopen, C3 mode page, 0x61 to 0x0100_0000,
+      ACK printed). Your go = one run of `chain --enable`. Regression run
+      without the flag is clean. [memory files written 2026-11-07]
 - [ ] When PR-7 lands: re-run the recorder against it; then Phase 3 vectors
       rebuild
