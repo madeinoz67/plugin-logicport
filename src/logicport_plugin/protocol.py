@@ -56,13 +56,14 @@ INIT_WRITE_TIMEOUT_MS = 5000
 INIT_LATENCY_MS = 4
 INIT_BAUD = 460800
 
-#: Bitstream configuration is the one phase where the serial rate dominates.
-#: An image is about one megabyte, so 460800 moves it at ~46 kB/s and costs
-#: ~23 s, while 3000000 moves it at ~760 kB/s and costs ~1.4 s (measured,
-#: record addendum 76). The vendor application configures at once; a client
-#: on the command baud looks broken beside it. Raise the rate for the stream
-#: and drop back to :data:`INIT_BAUD` for the command phase.
-CONFIG_BAUD = 3000000
+#: Bitstream configuration is the one phase where the serial rate dominates,
+#: and the arithmetic is unforgiving. At 460800 baud, 8N1 costs ten bit times
+#: per byte, so the line carries 46,080 B/s and a 1,057,840-byte slot takes
+#: 22.96 s. A 3 Mbaud line carries 300,000 B/s and would take 3.53 s. Those
+#: are floors, not estimates. This plugin drives the configuration at
+#: :data:`INIT_BAUD` and never raises the rate: a faster path is unimplemented,
+#: and an earlier note in these records claimed ~1.4 s at 3 Mbaud, which the
+#: arithmetic does not allow (it implies about 6 Mbaud).
 
 #: A client must NEVER write the wake byte. `0x61` to `0x00100000` puts the
 #: device into the FAULT state: the LED goes dark and only a replug clears
@@ -856,11 +857,12 @@ def ftdi_set_latency(ms: int = INIT_LATENCY_MS) -> dict:
 
 
 def ftdi_set_baud(baud: int = INIT_BAUD) -> dict:
-    """FT_SetBaudRate. Default is the command-phase rate, 460800.
+    """FT_SetBaudRate. Default and only used value is 460800.
 
-    Pass :data:`CONFIG_BAUD` to raise the rate for the bitstream stream:
-    the same one-megabyte image takes ~23 s at 460800 and ~1.4 s at
-    3000000 (measured). Drop back to 460800 before the command phase.
+    The configuration stream is rate-bound: 460800 at 8N1 carries 46,080 B/s,
+    so a 1,057,840-byte slot takes 22.96 s. Raising the rate would shorten it
+    (3 Mbaud gives 300,000 B/s and a 3.53 s floor) but no faster path is
+    implemented here, and the plugin never sends anything but ``INIT_BAUD``.
     """
     if not isinstance(baud, int) or isinstance(baud, bool) or baud < 1:
         raise ValueError("baud must be positive")

@@ -614,13 +614,23 @@ def test_forbidden_wake_byte_is_named():
     assert proto.FORBIDDEN_WAKE_ADDRESS == 0x00100000
 
 
-def test_config_baud_is_faster_than_command_baud():
-    """One megabyte of bitstream is ~23 s at 460800 and ~1.4 s at 3 Mbaud."""
-    assert proto.CONFIG_BAUD == 3000000
-    assert proto.CONFIG_BAUD > proto.INIT_BAUD
-    assert proto.ftdi_set_baud(proto.CONFIG_BAUD) == {
-        "kind": "ftdi_control", "op": "set_baud", "baud": 3000000,
+def test_configuration_rate_is_pinned_to_the_command_baud():
+    """The configuration stream rides INIT_BAUD; there is no faster path.
+
+    An earlier revision carried a `CONFIG_BAUD = 3000000` constant that no
+    code path transmitted, asserted by a test that only proved the constant
+    equalled itself. The arithmetic is what matters and it lives here now:
+    8N1 costs ten bit times per byte, so 460800 carries 46,080 B/s and a
+    1,057,840-byte slot needs 22.96 s. A 3 Mbaud line would still need
+    3.53 s, which is why the records' old "~1.4 s" claim was impossible.
+    """
+    assert proto.ftdi_set_baud() == {
+        "kind": "ftdi_control", "op": "set_baud", "baud": proto.INIT_BAUD,
     }
+    assert not hasattr(proto, "CONFIG_BAUD")
+    slot_bytes, bits_per_byte = 1_057_840, 10
+    assert round(slot_bytes / (proto.INIT_BAUD / bits_per_byte), 2) == 22.96
+    assert round(slot_bytes / (3_000_000 / bits_per_byte), 2) == 3.53
 
 
 def test_read_reply_length_rule():
