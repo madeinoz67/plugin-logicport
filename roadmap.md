@@ -15,7 +15,7 @@ surviving hypothesis. Evidence: `tools/session-2026-11-06-*.json`.
 
 - [x] Purge-before-parse, prime, timings, whole-body load
 - [x] UI preset/digest defect fixed (check-preset 4/4, check-ui green)
-- [ ] Land on `main` via PR (branch + PR + linked issue)
+- [x] Land on `main` via PR — #10 open, green, awaiting review
 
 ## Phase 2 — Tracker fold: RedTeam + lane findings onto #589
 
