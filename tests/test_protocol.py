@@ -388,18 +388,18 @@ def test_trigger_position_write_frames():
     assert frames[1] == proto.frame_c1(proto.wire_address(0x100006), proto.payload_word(93))
 
 
-def test_term_states_pack_msb_first():
-    # 34 term states, two bits each, channel 0 most significant:
-    # 0 = don't care, 1 = A, 2 = B, 3 = both.
+def test_term_states_pack_lsb_first():
+    # 34 term states, channel i at bit i: channel 0 is the least significant.
+    # 0 = don't care, 1 = plane A, 2 = plane B, 3 = both.
     terms = [0] * 34
-    terms[0] = 1  # channel 0 -> mask A, highest bit pair
-    terms[33] = 2  # channel 33 -> mask B, lowest bit pair
-    terms[17] = 3  # both masks
+    terms[0] = 1  # channel 0 -> plane A, bit 0
+    terms[33] = 2  # channel 33 -> plane B, bit 33
+    terms[17] = 3  # both planes, bit 17
     mask_a, mask_b = proto.pack_term_states(terms)
-    # Each mask is 34 bits, channel i at bit (33 - i): A accumulates
-    # states 1 and 3, B accumulates 2 and 3.
-    assert mask_a == (1 << 33) | (1 << 16)
-    assert mask_b == (1 << 0) | (1 << 16)
+    # The sender accumulates from channel 33 down to 0, so bit k = channel k.
+    # Plane A takes states 1 and 3; plane B takes 2 and 3.
+    assert mask_a == (1 << 0) | (1 << 17)
+    assert mask_b == (1 << 33) | (1 << 17)
     # 40-bit carriers, fitting the usbWrite40 payloads.
     proto.payload_40(mask_a)
     proto.payload_40(mask_b)
@@ -410,7 +410,8 @@ def test_term_states_pack_msb_first():
 
 
 def test_sequencer_write_plan():
-    # 15 ordered writes per segment at 0x200000+ (seg0) / 0x600000+ (seg1)
+    # The plan opens with the pattern planes, then the edge planes, then the tail.
+    # The four Value-term registers are sent only when range_active is true.
     # when terms AND state terms are active; the condition rows drop
     # without terms and the state rows drop without state terms.
     terms = [0] * 34
@@ -435,7 +436,7 @@ def test_sequencer_write_plan():
         match_and=0,
         control2=0,
     )
-    assert len(writes) == 15
+    assert len(writes) == 11  # pattern pair, edge pair, seven tail rows
     # Without state terms the two state-mask rows drop: 13 writes.
     writes_no_state = proto.sequencer_write_plan(
         segment=0,
@@ -457,21 +458,23 @@ def test_sequencer_write_plan():
         match_and=0,
         control2=0,
     )
-    assert len(writes_no_state) == 13
+    assert len(writes_no_state) == 9
     base = proto.SEQUENCER_SEGMENT_BASES[0]
     assert base == 0x200000
     order = [(register, len(payload)) for register, payload, _ in writes]
-    assert order[0] == (base + 0x12, 1)  # term-type byte first
-    assert order[1] == (base + 0x1A, 5)  # mask A accumulator (40-bit)
-    assert order[2] == (base + 0x1F, 5)  # mask B accumulator
-    assert order[3] == (base + 0x24, 5)  # dwell value 1
-    assert order[4] == (base + 0x00, 5)  # condition mask A
-    assert order[5] == (base + 0x05, 5)  # condition mask B
-    assert order[9] == (base + 0x19, 1)  # match mask
-    assert order[10] == (base + 0x0E, 4)  # param 1 as dword
-    assert order[11] == (base + 0x0A, 2)  # param 2 as word
+    assert order[0] == (base + 0x00, 5)  # pattern plane A
+    assert order[1] == (base + 0x05, 5)  # pattern plane B
+    assert order[2] == (base + 0x29, 5)  # edge plane A
+    assert order[3] == (base + 0x2E, 5)  # edge plane B
+    assert order[4] == (base + 0x18, 1)  # control byte
+    assert order[5] == (base + 0x19, 1)  # match mask
+    assert order[6] == (base + 0x0E, 4)  # param 1 as dword
+    assert order[7] == (base + 0x0A, 2)  # param 2 as word
     assert order[-1] == (base + 0x17, 1)  # control byte 2
-    # Segment 1 uses the 0x600000 base.
+    # A plain edge or pattern plan carries no Value-term register.
+    registers = {register for register, _, _ in writes}
+    assert not registers & {base + 0x12, base + 0x1A, base + 0x1F, base + 0x24}
+    # Segment 1 uses the 0x400000 base, the 2^22 bank.
     writes1 = proto.sequencer_write_plan(
         segment=1,
         terms=terms,
@@ -492,7 +495,8 @@ def test_sequencer_write_plan():
         match_and=0,
         control2=0,
     )
-    assert all(register >= 0x600000 for register, _, _ in writes1)
+    assert all(register >= 0x400000 for register, _, _ in writes1)
+    assert proto.SEQUENCER_SEGMENT_BASES == (0x200000, 0x400000)
     with pytest.raises(ValueError):
         proto.sequencer_write_plan(
             segment=2, terms=terms, state_terms_active=False, term_type=0, dwell1=0,
@@ -526,6 +530,8 @@ import pytest
 def test_parse_reply_real_probe_bytes():
     # Hand-recorded from the 2026-10-26 addr_probe run (count=4 @ 0x0000):
     # count+4 = 8 bytes: header C2 00 19 00 + four zero payload bytes.
+    # Four-byte header, settled by the bench tools (freq_probe.c states
+    # "header is 4 bytes"; vocab_probe.c reads payload at buf[4+k]).
     frame = bytes.fromhex("C200190000000000")
     r = parse_reply(frame)
     assert r == ReplyFrame(cmd_echo=0xC2, counter=0x19, aux=0x00,
@@ -569,19 +575,52 @@ def test_parse_write_ack_wrong_length_refuses():
 
 
 def test_hardware_observed_reply_grammar():
-    """The reply grammar the 2026-10-26 read-only probes showed (record
-    section 10).
+    """The reply grammar pinned by hardware (record section 10 and
+    addendum 76).
 
-    These pin observed wire shape only — the requested count plus a
-    four-byte read header, and a three-byte write ACK. No register value,
-    page bit or status bit is pinned anywhere: every probed address
-    returned zero data, and the status byte is not hardware-decoded.
+    Total length is the requested count plus four: FOUR header bytes then
+    ``count`` payload bytes. The request's length field carries
+    ``count - 1``. The header size is settled by the bench tools.
     """
     assert proto.READ_REPLY_HEADER_BYTES == 4
     assert proto.WRITE_ACK_BYTES == 3
-    # About 119 ms observed per write; the hypothesis that poll loops
-    # must pace at this cadence is recorded in the record, not asserted.
+    # About 119 ms observed per write; poll loops pace at this cadence.
     assert proto.WRITE_ACK_LATENCY_MS == 119
+
+
+def test_reply_length_rule_is_resolved():
+    """Total = count + 4, split four header bytes then `count` payload.
+
+    The count field in the REQUEST carries ``count - 1`` (an L+1 encoding),
+    which is why the total is larger than the raw field. Both parsers now
+    agree on the split, not only the total; the four-byte header comes
+    from the bench tools that produced the measurements.
+    """
+    for count in (1, 4, 8, 0x7FF):
+        frame = bytes([0xC2, 0x00, 0x40, 0x00]) + bytes(count)
+        assert len(frame) == proto.read_reply_length(count)
+        assert len(proto.parse_reply(frame).payload) == count
+        counter, data = proto.parse_read_reply(frame, count)
+        assert (counter, len(data)) == (0x40, count)
+
+
+def test_forbidden_wake_byte_is_named():
+    """Writing 0x61 to 0x00100000 faults the device (record addendum 76).
+
+    The prohibition is carried as named constants so no client re-derives
+    it, and the plugin sends no init write at all.
+    """
+    assert proto.FORBIDDEN_WAKE_BYTE == 0x61
+    assert proto.FORBIDDEN_WAKE_ADDRESS == 0x00100000
+
+
+def test_config_baud_is_faster_than_command_baud():
+    """One megabyte of bitstream is ~23 s at 460800 and ~1.4 s at 3 Mbaud."""
+    assert proto.CONFIG_BAUD == 3000000
+    assert proto.CONFIG_BAUD > proto.INIT_BAUD
+    assert proto.ftdi_set_baud(proto.CONFIG_BAUD) == {
+        "kind": "ftdi_control", "op": "set_baud", "baud": 3000000,
+    }
 
 
 def test_read_reply_length_rule():
@@ -591,20 +630,20 @@ def test_read_reply_length_rule():
 
 
 def test_parse_read_reply_shape():
-    # The observed frame: C2, 00, counter, then count+1 data bytes
-    # (zeros on every probe) — the data region mirrors the C1 L+1
-    # convention. Total length is the requested count plus four. (The
-    # adapter consumes parse_reply's aux-header split; this record-shape
-    # splitter is kept as landed and both agree on the total length.)
-    frame = bytes([0xC2, 0x00, 0x35]) + b"\x00" * 5
+    # The observed frame: C2, 00, counter, aux (four header bytes), then
+    # `count` payload bytes. Total length is the requested count plus four.
+    # The four-byte header is settled by the bench tools that measured the
+    # device (freq_probe.c: "header is 4 bytes"; vocab_probe.c reads
+    # buf[4+k]), so this splitter agrees with parse_reply.
+    frame = bytes([0xC2, 0x00, 0x35, 0x00]) + b"\x00" * 4
     counter, data = proto.parse_read_reply(frame, 4)
     assert counter == 0x35
-    assert data == b"\x00" * 5
+    assert data == b"\x00" * 4
     # The data bytes are returned verbatim; nothing decodes them.
-    frame = bytes([0xC2, 0x00, 0x36]) + b"\x01\x02\x03\x04"
+    frame = bytes([0xC2, 0x00, 0x36, 0x00]) + b"\x01\x02\x03"
     counter, data = proto.parse_read_reply(frame, 3)
     assert counter == 0x36
-    assert data == b"\x01\x02\x03\x04"
+    assert data == b"\x01\x02\x03"
     with pytest.raises(ValueError):
         proto.parse_read_reply(bytes([0xC1, 0x00, 0x37]) + b"\x00" * 5, 4)  # wrong echo
     with pytest.raises(ValueError):

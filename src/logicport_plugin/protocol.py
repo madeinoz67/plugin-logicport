@@ -50,11 +50,27 @@ FPGA_PULSE_START = 0x00  # config-start pulse byte (Protocol §5 step 4)
 FPGA_BITSTREAM_START = 0x04  # bitstream-start byte (Protocol §5 step 7)
 
 #: Init constants (Protocol §4): timeouts 5000/5000 ms, latency timer 4,
-#: baud 460800.
+#: baud 460800 for the command phase.
 INIT_READ_TIMEOUT_MS = 5000
 INIT_WRITE_TIMEOUT_MS = 5000
 INIT_LATENCY_MS = 4
 INIT_BAUD = 460800
+
+#: Bitstream configuration is the one phase where the serial rate dominates.
+#: An image is about one megabyte, so 460800 moves it at ~46 kB/s and costs
+#: ~23 s, while 3000000 moves it at ~760 kB/s and costs ~1.4 s (measured,
+#: record addendum 76). The vendor application configures at once; a client
+#: on the command baud looks broken beside it. Raise the rate for the stream
+#: and drop back to :data:`INIT_BAUD` for the command phase.
+CONFIG_BAUD = 3000000
+
+#: A client must NEVER write the wake byte. `0x61` to `0x00100000` puts the
+#: device into the FAULT state: the LED goes dark and only a replug clears
+#: it (record addendum 76). The vendor gates that byte behind a flag no
+#: shipped path sets, and this plugin sends no init write at all. Kept as a
+#: named constant so the prohibition has one obvious place to be read.
+FORBIDDEN_WAKE_BYTE = 0x61
+FORBIDDEN_WAKE_ADDRESS = 0x00100000
 
 #: Bitstream chunks of at most 10000 bytes, no response framing (§5 step 9).
 BITSTREAM_CHUNK_MAX = 10000
@@ -97,6 +113,8 @@ PLANE_D24_D31 = 0x02004000
 PLANE_FLAGS = 0x02009000
 
 #: The five plane bases in channel order, flags last.
+#: RETRACTED 2026-10-28: the wire carries no address (see docs addenda 5/6);
+#: kept for history, do not use.
 PLANE_BASES = (PLANE_D0_D7, PLANE_D8_D15, PLANE_D16_D23, PLANE_D24_D31, PLANE_FLAGS)
 
 #: Ping-pong page stride within the sample page. ASSUMPTION (flagged): the
@@ -365,6 +383,9 @@ def sample_mode_byte(clk_state: int, other_state: int) -> int:
 def wire_address(register: int) -> int:
     """Map a documented register address to the 16-bit C1/C2 address word.
 
+    RETRACTED 2026-10-28: the wire carries no address (see docs addenda
+    5/6); kept for history, do not use.
+
     The frame field is 16 bits (§5b). NO mapping here is hardware-proven:
     the 2026-10-26 read-only probes (record section 10) returned the same
     zero-data reply shape for every address tried, so the low-16
@@ -387,6 +408,9 @@ def wire_address(register: int) -> int:
 
 def sample_plane_wire_address(plane: int, page_base: int) -> int:
     """Wire address of one sample-plane chunk (Protocol §6.1).
+
+    RETRACTED 2026-10-28: the wire carries no address (see docs addenda
+    5/6); kept for history, do not use.
 
     ``plane`` indexes PLANE_BASES (0-3 channel data, 4 flags); the page
     base is ``(tp + 1 + prescale) mod 0x400`` (plus PAGE_STRIDE for the
@@ -649,28 +673,34 @@ def trigger_column_compensated(column_count: int, trigger_word: int, pipeline: i
 #
 # Read-only probes of the live device (tools/addr_probe.c reads,
 # tools/write_probe.c writes; no register writes). This section records
-# OBSERVED WIRE SHAPE only: every probed address returned zero data, so no
-# register value, page bit or status bit is confirmed by it. The adapter
-# consumes this grammar (#562 wire truth): every C2 exchange parses the
-# count+4 reply through :func:`parse_reply`, every write ACK parses
-# through :func:`parse_write_ack`, and one command counter sequences both
-# directions (continuity enforced, wrap-aware).
+# HARDWARE-OBSERVED GRAMMAR (#562 wire truth). The adapter consumes it:
+# every C2 exchange parses the count+4 reply through :func:`parse_reply`,
+# every write ACK parses through :func:`parse_write_ack`, and one command
+# counter sequences both directions (continuity enforced, wrap-aware).
 #
-# Read reply: count+4 bytes  [cmd_echo, 0x00, counter, aux] + count payload
-# bytes, values big-endian. Write ACK: exactly 3 bytes [CMD_WRITE, 0x00,
-# counter]. The aux byte's meaning is UNPROVEN — parse, record, never
-# interpret. Where the payload boundary sits inside the count+4 total is
-# the one open interpretation: :func:`parse_reply` treats byte 3 as the
-# aux header and the payload as the count bytes (the shape the adapter
-# consumes); :func:`parse_read_reply` treats byte 3 as the first of
-# count+1 data bytes (the record's L+1-mirror reading). Both agree on the
-# total length; every probed address answered zeros, so no register data
-# discriminates them — a register-data probe is the experiment that
-# closes it.
+# Read reply: FOUR header bytes then `count` payload bytes, total
+# `count + 4`. The header is `C2 00 <counter> <aux>`. The request's length
+# field carries `count - 1` (an L+1 encoding), which is why the device
+# answers one data byte more than the request's raw field.
+# Write ACK: exactly 3 bytes [CMD_WRITE, 0x00, counter]. A C3 page select
+# mirrors it and advances the same counter.
+#
+# The header is four bytes, and that is settled by the bench tools that
+# produced the measurements, not by prose: `tools/freq_probe.c` states
+# "header is 4 bytes" at its payload check, `tools/vocab_probe.c` reads
+# payload at `buf[4 + k]` and prints the header as `buf[0..3]`,
+# `tools/capture_decode.c` returns the status byte as `r[4]`, and
+# `tools/bitmap.c` and `tools/capture_full.c` both copy from `buf + 4`
+# with `payload = total - 4`. The sha-pinned golden vectors in
+# `vectors.json` agree: `count` data bytes after a 4-byte header.
+#
+# An earlier reading of addendum 76's prose ("three header bytes then N+1
+# payload bytes") conflated the frame's L+1 length encoding with the
+# header size. The physical tools settle it the other way and the record
+# carries a dated correction.
 
-#: A read reply runs the requested count plus four bytes: `C2`, `00`, the
-#: command counter, the aux byte, then the payload (see the boundary note
-#: above). Every probed address answered zeros.
+#: A read reply runs the requested count plus four bytes: four header
+#: bytes (`C2`, `00`, counter, aux) then `count` payload bytes.
 READ_REPLY_HEADER_BYTES = 4
 #: A write ACK is exactly three bytes: C1, a zero byte, the same command
 #: counter the read replies carry. The ACK-shape open item is closed at
@@ -699,7 +729,7 @@ class ReplyFrame(NamedTuple):
 
 
 def parse_reply(data: bytes, expected_cmd: int = CMD_READ) -> ReplyFrame:
-    """Parse a read reply of the hardware-proven shape."""
+    """Parse a read reply of the hardware-observed shape."""
     if not isinstance(data, bytes) or len(data) < 4:
         raise ValueError("reply needs at least 4 header bytes")
     if data[0] != expected_cmd:
@@ -723,13 +753,12 @@ def parse_write_ack(data: bytes) -> ReplyFrame:
 def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
     """Split an observed read reply into ``(counter, data)``.
 
-    The frame is ``C2 00 <counter>`` then count+1 data bytes; the total
-    length is the requested count plus four (the payload-boundary
-    interpretation differs from :func:`parse_reply` — see the section
-    note; no register data discriminates them). The data bytes come back
-    verbatim — nothing here decodes register values (every probed
-    address answered zeros; the status/register layer is not
-    hardware-decoded, record section 10).
+    The frame is ``C2 00 <counter> <aux>`` then ``count`` payload bytes;
+    the total length is the requested count plus four. The four-byte
+    header is settled by the bench tools that measured the device (see the
+    section note), so this agrees with :func:`parse_reply` on the split.
+    The data bytes come back verbatim; nothing here decodes register
+    values.
     """
     if not isinstance(data, bytes):
         raise ValueError("a reply is bytes")
@@ -742,7 +771,7 @@ def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
         raise ValueError("a read reply echoes C2")
     if data[1] != 0x00:
         raise ValueError("read-reply byte 1 is 00 on every observed frame")
-    return data[2], data[3:]
+    return data[2], data[READ_REPLY_HEADER_BYTES:]
 
 
 def counter_step(previous: int, current: int) -> str:
@@ -827,7 +856,12 @@ def ftdi_set_latency(ms: int = INIT_LATENCY_MS) -> dict:
 
 
 def ftdi_set_baud(baud: int = INIT_BAUD) -> dict:
-    """FT_SetBaudRate (Protocol §4 step 6: 460800)."""
+    """FT_SetBaudRate. Default is the command-phase rate, 460800.
+
+    Pass :data:`CONFIG_BAUD` to raise the rate for the bitstream stream:
+    the same one-megabyte image takes ~23 s at 460800 and ~1.4 s at
+    3000000 (measured). Drop back to 460800 before the command phase.
+    """
     if not isinstance(baud, int) or isinstance(baud, bool) or baud < 1:
         raise ValueError("baud must be positive")
     return ftdi_control("set_baud", baud=baud)
@@ -978,8 +1012,11 @@ def trigger_position_frames(mode_flag: int, clock_type: int, position: int) -> l
 
 # --- Trigger sequencer (protocol-spec.md, confirmed) -----------------------
 
-#: Per-segment register bases: segment 0 at 0x200000, segment 1 at 0x600000.
-SEQUENCER_SEGMENT_BASES = (0x200000, 0x600000)
+#: Per-segment register bases: segment 0 at 0x200000, segment 1 at 0x400000.
+#: The bases come from DefineHardwareAddresses (FUN_00471af1): 2^21 for slot 0
+#: and 2^22 for slot 1. An earlier revision of this module used 0x600000, which
+#: is not a bank the device has.
+SEQUENCER_SEGMENT_BASES = (0x200000, 0x400000)
 
 #: Two-bit per-channel term states, packed most-significant-first over the
 #: 34 channels: 0 = do not care, 1 = accumulate A, 2 = accumulate B,
@@ -991,10 +1028,15 @@ TERM_BOTH = 3
 
 
 def pack_term_states(terms: list[int]) -> tuple[int, int]:
-    """Pack 34 per-channel term states into the (mask A, mask B) pair.
+    """Pack 34 per-channel term states into the (plane A, plane B) pair.
 
-    Channel i occupies bit (33 - i) of each 34-bit mask: mask A collects
-    states 1 and 3, mask B collects 2 and 3.
+    Channel i occupies bit i of each 34-bit plane: channel 0 is bit 0, which is
+    the least significant bit. The sender FUN_004f2dd4 accumulates from channel
+    33 down to channel 0, doubling the accumulator before the conditional add,
+    so the result reads as bit k = channel k. An earlier revision of this
+    module used bit (33 - i) and reversed every channel.
+
+    Plane A collects states 1 and 3, plane B collects 2 and 3.
     """
     if not isinstance(terms, list) or len(terms) != CHANNEL_COUNT:
         raise ValueError(f"terms must list {CHANNEL_COUNT} channel states")
@@ -1003,7 +1045,7 @@ def pack_term_states(terms: list[int]) -> tuple[int, int]:
     for channel, state in enumerate(terms):
         if isinstance(state, bool) or not isinstance(state, int) or not 0 <= state <= 3:
             raise ValueError("term states must be 0..3")
-        bit = 1 << (CHANNEL_COUNT - 1 - channel)
+        bit = 1 << channel
         if state in (TERM_A, TERM_BOTH):
             mask_a |= bit
         if state in (TERM_B, TERM_BOTH):
@@ -1030,27 +1072,39 @@ def sequencer_write_plan(
     flag: int,
     match_and: int,
     control2: int,
+    range_active: bool = False,
 ) -> list[tuple[int, bytes, str]]:
-    """The confirmed 15-row sequencer write plan for one segment.
+    """The sequencer write plan for one segment.
 
     Returns ``(register, payload, label)`` tuples in write order, registers
-    at the segment base plus the documented offsets. The condition-mask
-    rows carry caller-supplied masks only when terms are active; the
-    state-mask rows only when state terms are active (13 rows then). The
-    accumulator masks derive from ``terms``; the rest are the segment's
-    own field values (the byte-level semantics are the record's labels).
+    at the segment base plus the documented offsets.
+
+    The four registers at ``+0x12``, ``+0x1A``, ``+0x1F`` and ``+0x24`` are
+    **not** mask accumulators. They carry the Value term, which the device
+    gates on the term record's ``+0x46`` byte. They are sent only when
+    ``range_active`` is true, and then they carry the digit mode, the
+    full-scale digit sum, and the two bounds converted to binary digit
+    strings. An earlier revision of this module sent them on every capture,
+    which put range-term frames in front of the pattern and edge planes.
+    A future revision should give these four payloads their own parameters.
+
+    The condition-mask rows carry caller-supplied masks only when terms are
+    active. The state-mask rows carry the edge planes only when state terms
+    are active.
     """
     if not isinstance(segment, int) or isinstance(segment, bool) or not 0 <= segment < len(SEQUENCER_SEGMENT_BASES):
         raise ValueError("segment must be 0 or 1")
     mask_a, mask_b = pack_term_states(terms)
     terms_active = any(state != TERM_DONT_CARE for state in terms)
     base = SEQUENCER_SEGMENT_BASES[segment]
-    plan: list[tuple[int, bytes, str]] = [
-        (base + 0x12, payload_byte(term_type), "term type"),
-        (base + 0x1A, payload_40(mask_a), "mask A accumulator"),
-        (base + 0x1F, payload_40(mask_b), "mask B accumulator"),
-        (base + 0x24, payload_40(dwell1), "dwell value 1"),
-    ]
+    plan: list[tuple[int, bytes, str]] = []
+    if range_active:
+        plan += [
+            (base + 0x12, payload_byte(term_type), "digit mode"),
+            (base + 0x1A, payload_40(mask_a), "digit sum, full scale"),
+            (base + 0x1F, payload_40(mask_b), "value from string A"),
+            (base + 0x24, payload_40(dwell1), "value from string B"),
+        ]
     if terms_active:
         plan += [
             (base + 0x00, payload_40(condition_mask_a), "condition mask A"),

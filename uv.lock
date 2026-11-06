@@ -22,7 +22,7 @@ wheels = [
 
 [[package]]
 name = "benchweave-sdk"
-version = "0.22.0"
+version = "0.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -32,9 +32,9 @@ dependencies = [
     { name = "rfc3987" },
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/67/2b6979e8c46fda85fe16b4ddfd7db8466767efa26d2921af313e336d9a9e/benchweave_sdk-0.22.0.tar.gz", hash = "sha256:e0390ceb820ff8a8a87dc2b275499fc9574045a74b15a894cc2a4fa277a35ead", size = 890282, upload-time = "2026-10-25T23:03:49.842Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/5a/225f21b934348db1252fbf9aa6f4b51eaf2474cbdf12fa4670f31a3a3c44/benchweave_sdk-0.23.0.tar.gz", hash = "sha256:d98f91e3b24508e27b0426187c376326890293522bacb4708427754d05408ad3", size = 901818, upload-time = "2026-10-26T05:14:41.14Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e9/60/e1e121a4a295576c177f2f5fbcd4d60c9181251522e7011ba24036030bf3/benchweave_sdk-0.22.0-py3-none-any.whl", hash = "sha256:b76a50dc2a4577acbec3ec83c115ba669a941c79c8548bc17e7c14f5f95e355c", size = 1152125, upload-time = "2026-10-25T23:03:48.142Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/b3/b81305f76d9f789c71170107d2b61b07fee97dbfbbb4ab19639c56f7a55d/benchweave_sdk-0.23.0-py3-none-any.whl", hash = "sha256:ee62d03a356916b47a5340f83c9bf8626468925cbf6f098feef085e78f08fffd", size = 1176303, upload-time = "2026-10-26T05:14:39.5Z" },
 ]
 
 [package.optional-dependencies]
@@ -179,7 +179,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "benchweave-sdk", extras = ["scaffold"], marker = "extra == 'test'", specifier = "==0.22.0" },
+    { name = "benchweave-sdk", extras = ["scaffold"], marker = "extra == 'test'", specifier = "==0.23.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
 ]
 provides-extras = ["test"]

@@ -364,7 +364,10 @@ The host writes two words to registers `0x100004` and `0x100006` (2 bytes each).
 
 ### Sequencer Write Order (per segment)
 
-Registers are `0x200000` plus the offsets below for segment 0, `0x600000` plus the same offsets for segment 1. Each write is a C1 frame to that register.
+Registers are `0x200000` plus the offsets below for segment 0, and `0x400000`
+plus the same offsets for segment 1. Segment 1 is the 2^22 bank. An earlier
+revision of this document named `0x600000`, which is not a bank the device
+has. Each write is a C1 frame to that register.
 
 | # | Register offset | Payload | Source |
 |---|---|---|---|

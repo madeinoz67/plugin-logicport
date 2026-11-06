@@ -1337,7 +1337,7 @@ def test_invoke_configure_sequencer():
         result = await plugin.execute(request, context)
         validate_result(result, request)
         assert result["status"] == "ok", result
-        assert result["data"]["result"]["writes_sent"] == 15
+        assert result["data"]["result"]["writes_sent"] == 11
         host.assert_complete()
         await plugin.close(context)
     asyncio.run(run())

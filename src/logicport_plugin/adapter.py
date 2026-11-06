@@ -1059,11 +1059,14 @@ class Plugin:
             "segment", "terms", "state_terms_active", "term_type", "dwell1",
             "condition_mask_a", "condition_mask_b", "state_mask_a", "state_mask_b",
             "control", "match_mask", "param1", "param1_dword", "param2",
-            "param2_dword", "flag", "match_and", "control2",
+            "param2_dword", "flag", "match_and", "control2", "range_active",
         }
-        if set(inputs) != allowed:
+        unknown = set(inputs) - allowed
+        if unknown:
             return self._failure_inject(
-                operation_id, verb, "INVALID_ARGUMENT", f"configure_sequencer accepts {sorted(allowed)}"
+                operation_id, verb,
+                "INVALID_ARGUMENT",
+                f"configure_sequencer does not accept {sorted(unknown)}; it accepts {sorted(allowed)}",
             )
         terms = inputs["terms"]
         if not isinstance(terms, list):
