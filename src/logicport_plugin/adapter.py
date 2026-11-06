@@ -118,6 +118,12 @@ _C3_DRAIN_MAX_BYTES = 8
 #: timer ticks. Same check-then-sleep shape as the gate loop (fold R12).
 _PIN_POLL_PACE_S = 0.005
 
+#: Reply pacing under the honest-empty regime (SDK PR 239): bounded
+#: retries for a reply that races the read. The C tools budget 700-900 ms
+#: per reply (full_load.c rx()); 40 x 25 ms covers that window.
+_REPLY_RETRY_ATTEMPTS = 40
+_REPLY_RETRY_PACE_S = 0.025
+
 #: Inter-write gap during the bitstream stream (full_load.c tx(): 300 us).
 _BITSTREAM_INTER_WRITE_S = 0.0003
 
@@ -410,7 +416,7 @@ class Plugin:
                 "addendum 32, rule 1)"
             )
         await self._send_frame(proto.frame_c3(segment), context)
-        raw = await self._receive(context, 3, exact_bytes=3)
+        raw = await self._receive_reply(context, 3)
         frame = proto.parse_c3_ack(raw)
         await self.services.record_evidence(
             {"kind": proto.EVIDENCE_C3_ACK, "segment": segment, "counter": frame.counter},
@@ -434,7 +440,7 @@ class Plugin:
         has already primed, which the write paths do.
         """
         await self._send_frame(c2_frame, context)
-        raw = await self._receive(context, count + 4, exact_bytes=count + 4)
+        raw = await self._receive_reply(context, count + 4)
         frame = proto.parse_reply(raw)
         await self._advance_counter(frame.counter, context)
         return frame
@@ -1063,9 +1069,33 @@ class Plugin:
             raise ValueError("receive returned no bytes")
         return data
 
+    async def _receive_reply(self, context, count):
+        """A reply receive that PACES for the device's answer.
+
+        Under the honest-empty regime (SDK PR 239: the rx purge clears the
+        ring, so a read racing the reply gets empty bytes, not stale
+        garbage), the first receive can fire before the device has
+        answered. Each empty or starved attempt paces and retries; a
+        bounded number of attempts, then the emptiness is real and the
+        caller's parse fails honestly. Measured: the race is narrow - a
+        trigger_position read succeeded with no pacing at all on the first
+        PR-7 bench run (session-2026-11-07-pr7-first-read.json).
+        """
+        last = b""
+        for attempt in range(_REPLY_RETRY_ATTEMPTS):
+            try:
+                data = await self._receive(context, count, exact_bytes=count)
+            except TimeoutError:
+                data = b""
+            if data:
+                return data
+            last = data
+            await _pace_wait(_REPLY_RETRY_PACE_S)
+        return last
+
     async def _ack_write(self, context) -> proto.ReplyFrame:
         """The hardware-proven ACK: exactly 3 bytes (write_probe, #562)."""
-        raw = await self._receive(context, 3, exact_bytes=3)
+        raw = await self._receive_reply(context, 3)
         frame = proto.parse_write_ack(raw)
         await self.services.record_evidence(
             {"kind": proto.EVIDENCE_WRITE_ACK, "bytes": 3, "counter": frame.counter},

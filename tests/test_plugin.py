@@ -1184,7 +1184,20 @@ def test_uncertain_outcome_after_dispatch():
                 [
                     *_frame_send(proto.frame_c2(0x0000, 4)),
                     # The status reply is the proven count+4 frame (#562).
-                    _exchange(proto.stream_receive(8, 8), response),
+                    # Pacing (SDK PR 239's honest-empty regime): a starved
+                    # or empty receive is retried up to the bound, so the
+                    # starved shapes need one row per attempt.
+                    *[
+                        _exchange(proto.stream_receive(8, 8), response)
+                        for _ in range(
+                            adapter._REPLY_RETRY_ATTEMPTS if response == {"data": b""} else 1
+                        )
+                        # A scripted TimeoutError FAULTS the mock transport
+                        # (its law: a driver exception is permanent), so the
+                        # retry's second attempt surfaces the fault as
+                        # ConnectionError - still an uncertain outcome. The
+                        # empty return does not fault; all retries consume.
+                    ],
                 ]
             )
             plugin = create_plugin()

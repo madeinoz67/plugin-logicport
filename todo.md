@@ -44,6 +44,10 @@
       EVER (trigger_position ok); stale-ring echo class gone; comment
       6690919120 on the PR carries the evidence. Remaining failures are
       reply-pacing shaped (plugin-side row below)
-- [ ] After 239 merges: pace reads for the honest-empty regime (retry the
-      exact-byte receive on empty); then Phase 3 vectors rebuild from a
-      clean capture
+- [x] 239 MERGED; reply pacing landed (40 x 25 ms, the C tools' 900 ms
+      window): status AND trigger_position both read OK through the plugin
+      (session-2026-11-07-two-reads-ok.json); read_counter's refusal is an
+      honest counter gap after configure's 60 s budget miss (#589 row);
+      read_samples awaits the engine enable
+- [ ] Phase 3: vectors rebuild from a clean capture (needs configure inside
+      its budget + the engine enable go)

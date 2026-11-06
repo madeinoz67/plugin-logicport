@@ -30,12 +30,11 @@ issues local. Non-blocking per ruling.
 never hand-authored. Blocked on a plugin run that completes framed
 exchanges (Phase 4 gate).
 
-## Phase 4 — SDK transport bisect (was: driver fork — dissolved 2026-11-06)
+## Phase 4 — SDK transport bisect ✅ (closed 2026-11-07)
 
-pyftdi talks (pyftdi_full_load.py, counters 00-08, addendum 78). The
-fault is the SDK transport wrapping: timeouts the C path never sets, the
-establish path's own init, chunk size, or the missing post-flush 64-byte
-drain. Bisect one difference at a time against the working script.
+Root cause: the receive ring survived the rx purge. Fixed SDK-side in
+PR 239 (validated pre-merge on hardware). Plugin-side reply pacing landed
+(40 x 25 ms). Two reads now complete through the transport.
 
 ## Phase 5 — First decoded capture end-to-end
 

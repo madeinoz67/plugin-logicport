@@ -44,3 +44,6 @@
 - [x] PR-7 pre-merge bench validation: trigger_position read OK through the
       SDK transport (session-2026-11-07-pr7-first-read.json) - the ring
       purge is proven on hardware
+
+- [x] Reply pacing landed: two device reads (status, trigger_position)
+      complete through the plugin against merged PR 239
