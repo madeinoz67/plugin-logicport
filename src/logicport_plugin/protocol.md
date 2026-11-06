@@ -183,12 +183,24 @@ run the resync flush. The adapter locates the `.ccf` from the action input
 SHA-256, and refuses any other bitstream. The file is never bundled.
 
 Two measured facts from the bench (record addendum 76). **The serial rate
-dominates configuration.** An image is about one megabyte: at 460800 the
-stream moves at ~46 kB/s and costs ~23 s, at 3000000 it moves at ~760 kB/s
-and costs ~1.4 s, and the port needs a 4 ms latency timer. `CONFIG_BAUD`
-carries the high rate; drop back to `INIT_BAUD` for the command phase. A
-client on the command baud looks broken beside the vendor application,
-which configures at once.
+dominates configuration, and the arithmetic is unforgiving.** At 460800 baud,
+8N1 costs ten bit times per byte, so the line carries 46,080 B/s and a
+1,057,840-byte slot takes 22.96 s. The port needs a 4 ms latency timer. This
+plugin drives configuration at `INIT_BAUD` and has no faster path.
+
+A correction belongs here. An earlier revision of this section said 3 Mbaud
+moves the image at ~760 kB/s in ~1.4 s. That is impossible: 3 Mbaud at 8N1 is
+300,000 B/s, so the floor is 3.53 s, and 1.4 s would require about 6 Mbaud.
+The figure came from addendum 76 and was copied without dividing. A
+`CONFIG_BAUD` constant carried it and nothing ever transmitted it.
+
+**A budget consequence worth knowing.** `configure_fpga` accepts `attempts`
+from 1 to 20, and one attempt costs about 23 s. The `invoke` verb's declared
+budget is 60,000 ms, so three attempts exceed it. The action declares its own
+`timeout_ms` of 60000, but the standalone host does not read per-action
+timeouts today, so the declared parameter range admits work the governing
+budget forbids. That is a host-side gap, tracked on issue #589, not a plugin
+defect: narrowing the range here would hide it.
 
 **Never write the wake byte.** `0x61` to `0x00100000` puts the device into
 the FAULT state: the LED goes dark and only a replug clears it. The vendor
