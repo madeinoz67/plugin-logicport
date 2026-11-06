@@ -127,20 +127,22 @@ source lands, and a fetch dataset now carries
 `context.completion_proven: false` so the dataset itself admits it
 (fold R6, 2026-10-26: the gate hook's source is `None`; the field rides
 the dataset's free-form context block because the OTDP dataset schema
-closes its top-level keys). The header region is `C2 00 <counter>` — three
-bytes — and the count field carries `count - 1`, so the payload is
-`count + 1` bytes and the total is `count + 4`. That length rule is
-resolved. One thing is not: whether byte 3 is the last header byte or the
-first data byte. The 2026-10-29 decode addendum reads it as data (3 header
-+ count+1); the sha-pinned golden vectors in `vectors.json` carry exactly
-`count` data bytes after a 4-byte header. Both agree on the total, and
-every golden exchange is zero in that region, so the vectors cannot
-discriminate. `parse_reply` keeps the 4-header split the vectors pin and
-`parse_read_reply` keeps the 3-header split; a hand-recorded exchange with
-non-zero data at byte 3 is the experiment that closes it. The full dated
-addendum with the probe outputs lands in the parent-dir record —
-`docs/LogicPort-Protocol.md` in the logiport workspace one directory above
-this plugin project (issue #562).
+closes its top-level keys). The header is `C2 00 <counter> <aux>`, four
+bytes, then `count` payload bytes, total `count + 4`. The request's length
+field carries `count - 1`, an L+1 encoding, which is why the reply is
+larger than the raw field. The header size is settled by the bench tools
+that produced the measurements, not by prose: `tools/freq_probe.c` states
+"header is 4 bytes" at its payload check, `tools/vocab_probe.c` reads
+payload at `buf[4 + k]` and prints the header as `buf[0..3]`,
+`tools/capture_decode.c` returns the status byte as `r[4]`, and
+`tools/bitmap.c` and `tools/capture_full.c` copy from `buf + 4` with
+`payload = total - 4`. The sha-pinned golden vectors agree. An earlier
+reading of addendum 76's prose ("three header bytes then N+1 payload")
+conflated that L+1 length encoding with the header size; the record
+carries a dated correction. The full dated addendum with the probe
+outputs lands in the parent-dir record — `docs/LogicPort-Protocol.md` in
+the logiport workspace one directory above this plugin project (issue
+#562).
 
 The frame carries a 16-bit address field. The one hardware-proven wire
 mapping is status `0x100000` → word `0x0000`. Sample-plane addresses

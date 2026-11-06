@@ -678,25 +678,29 @@ def trigger_column_compensated(column_count: int, trigger_word: int, pipeline: i
 # every write ACK parses through :func:`parse_write_ack`, and one command
 # counter sequences both directions (continuity enforced, wrap-aware).
 #
-# Read reply length is RESOLVED: three header bytes then `count + 1` data
-# bytes, total `count + 4`. The count field carries `count - 1`.
+# Read reply: FOUR header bytes then `count` payload bytes, total
+# `count + 4`. The header is `C2 00 <counter> <aux>`. The request's length
+# field carries `count - 1` (an L+1 encoding), which is why the device
+# answers one data byte more than the request's raw field.
 # Write ACK: exactly 3 bytes [CMD_WRITE, 0x00, counter]. A C3 page select
 # mirrors it and advances the same counter.
 #
-# ONE OPEN DIVERGENCE, recorded so it is not silently "fixed": where the
-# 3 header bytes end and data begins. The 2026-10-29 decode addendum reads
-# byte 3 as the first data byte (3 header + count+1). The sha-pinned
-# hardware-golden vectors in `vectors.json` carry exactly `count` data
-# bytes after a 4-byte header (4 header + count). Both agree on the total
-# length, and every golden exchange is zero in that region, so the vectors
-# cannot discriminate. :func:`parse_reply` keeps the 4-header split that
-# the golden vectors pin; :func:`parse_read_reply` keeps the 3-header
-# split. A hand-recorded exchange with non-zero data at byte 3 is the
-# experiment that closes it, and it must be recorded, never derived.
+# The header is four bytes, and that is settled by the bench tools that
+# produced the measurements, not by prose: `tools/freq_probe.c` states
+# "header is 4 bytes" at its payload check, `tools/vocab_probe.c` reads
+# payload at `buf[4 + k]` and prints the header as `buf[0..3]`,
+# `tools/capture_decode.c` returns the status byte as `r[4]`, and
+# `tools/bitmap.c` and `tools/capture_full.c` both copy from `buf + 4`
+# with `payload = total - 4`. The sha-pinned golden vectors in
+# `vectors.json` agree: `count` data bytes after a 4-byte header.
+#
+# An earlier reading of addendum 76's prose ("three header bytes then N+1
+# payload bytes") conflated the frame's L+1 length encoding with the
+# header size. The physical tools settle it the other way and the record
+# carries a dated correction.
 
-#: A read reply runs the requested count plus four bytes: three header
-#: bytes (`C2`, `00`, counter) then `count + 1` data bytes. The count field
-#: holds `count - 1`.
+#: A read reply runs the requested count plus four bytes: four header
+#: bytes (`C2`, `00`, counter, aux) then `count` payload bytes.
 READ_REPLY_HEADER_BYTES = 4
 #: A write ACK is exactly three bytes: C1, a zero byte, the same command
 #: counter the read replies carry. The ACK-shape open item is closed at
@@ -749,12 +753,12 @@ def parse_write_ack(data: bytes) -> ReplyFrame:
 def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
     """Split an observed read reply into ``(counter, data)``.
 
-    The frame is ``C2 00 <counter>`` then count+1 data bytes; the total
-    length is the requested count plus four. The length rule is resolved;
-    the SPLIT is the one open divergence (see the section note) —
-    :func:`parse_reply` keeps the 4-header split the golden vectors pin,
-    this keeps the decode addendum's 3-header split. The data bytes come
-    back verbatim; nothing here decodes register values.
+    The frame is ``C2 00 <counter> <aux>`` then ``count`` payload bytes;
+    the total length is the requested count plus four. The four-byte
+    header is settled by the bench tools that measured the device (see the
+    section note), so this agrees with :func:`parse_reply` on the split.
+    The data bytes come back verbatim; nothing here decodes register
+    values.
     """
     if not isinstance(data, bytes):
         raise ValueError("a reply is bytes")
@@ -767,7 +771,7 @@ def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
         raise ValueError("a read reply echoes C2")
     if data[1] != 0x00:
         raise ValueError("read-reply byte 1 is 00 on every observed frame")
-    return data[2], data[3:]
+    return data[2], data[READ_REPLY_HEADER_BYTES:]
 
 
 def counter_step(previous: int, current: int) -> str:

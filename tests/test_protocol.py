@@ -530,8 +530,8 @@ import pytest
 def test_parse_reply_real_probe_bytes():
     # Hand-recorded from the 2026-10-26 addr_probe run (count=4 @ 0x0000):
     # count+4 = 8 bytes: header C2 00 19 00 + four zero payload bytes.
-    # The split (4 header vs the decode addendum's 3) is the one open
-    # divergence; this parser keeps the split the golden vectors pin.
+    # Four-byte header, settled by the bench tools (freq_probe.c states
+    # "header is 4 bytes"; vocab_probe.c reads payload at buf[4+k]).
     frame = bytes.fromhex("C200190000000000")
     r = parse_reply(frame)
     assert r == ReplyFrame(cmd_echo=0xC2, counter=0x19, aux=0x00,
@@ -578,10 +578,9 @@ def test_hardware_observed_reply_grammar():
     """The reply grammar pinned by hardware (record section 10 and
     addendum 76).
 
-    Total length is the requested count plus four: three header bytes and
-    ``count + 1`` data bytes, because the count field carries
-    ``count - 1``. Where the header ends is the one open divergence
-    between the decode addendum and the golden vectors.
+    Total length is the requested count plus four: FOUR header bytes then
+    ``count`` payload bytes. The request's length field carries
+    ``count - 1``. The header size is settled by the bench tools.
     """
     assert proto.READ_REPLY_HEADER_BYTES == 4
     assert proto.WRITE_ACK_BYTES == 3
@@ -590,19 +589,19 @@ def test_hardware_observed_reply_grammar():
 
 
 def test_reply_length_rule_is_resolved():
-    """Total = count + 4, with the count field carrying ``count - 1``.
+    """Total = count + 4, split four header bytes then `count` payload.
 
-    Both parsers agree on the TOTAL length. They differ only on where the
-    header ends, which the golden vectors cannot discriminate (their byte
-    3 is zero on every row). The open divergence is recorded, not papered
-    over.
+    The count field in the REQUEST carries ``count - 1`` (an L+1 encoding),
+    which is why the total is larger than the raw field. Both parsers now
+    agree on the split, not only the total; the four-byte header comes
+    from the bench tools that produced the measurements.
     """
     for count in (1, 4, 8, 0x7FF):
-        frame = bytes([0xC2, 0x00, 0x40]) + bytes(count + 1)
+        frame = bytes([0xC2, 0x00, 0x40, 0x00]) + bytes(count)
         assert len(frame) == proto.read_reply_length(count)
         assert len(proto.parse_reply(frame).payload) == count
         counter, data = proto.parse_read_reply(frame, count)
-        assert (counter, len(data)) == (0x40, count + 1)
+        assert (counter, len(data)) == (0x40, count)
 
 
 def test_forbidden_wake_byte_is_named():
@@ -631,20 +630,20 @@ def test_read_reply_length_rule():
 
 
 def test_parse_read_reply_shape():
-    # The observed frame: C2, 00, counter, then count+1 data bytes
-    # (zeros on every probe) — the data region mirrors the C1 L+1
-    # convention. Total length is the requested count plus four. (The
-    # adapter consumes parse_reply's aux-header split; this record-shape
-    # splitter is kept as landed and both agree on the total length.)
-    frame = bytes([0xC2, 0x00, 0x35]) + b"\x00" * 5
+    # The observed frame: C2, 00, counter, aux (four header bytes), then
+    # `count` payload bytes. Total length is the requested count plus four.
+    # The four-byte header is settled by the bench tools that measured the
+    # device (freq_probe.c: "header is 4 bytes"; vocab_probe.c reads
+    # buf[4+k]), so this splitter agrees with parse_reply.
+    frame = bytes([0xC2, 0x00, 0x35, 0x00]) + b"\x00" * 4
     counter, data = proto.parse_read_reply(frame, 4)
     assert counter == 0x35
-    assert data == b"\x00" * 5
+    assert data == b"\x00" * 4
     # The data bytes are returned verbatim; nothing decodes them.
-    frame = bytes([0xC2, 0x00, 0x36]) + b"\x01\x02\x03\x04"
+    frame = bytes([0xC2, 0x00, 0x36, 0x00]) + b"\x01\x02\x03"
     counter, data = proto.parse_read_reply(frame, 3)
     assert counter == 0x36
-    assert data == b"\x01\x02\x03\x04"
+    assert data == b"\x01\x02\x03"
     with pytest.raises(ValueError):
         proto.parse_read_reply(bytes([0xC1, 0x00, 0x37]) + b"\x00" * 5, 4)  # wrong echo
     with pytest.raises(ValueError):
