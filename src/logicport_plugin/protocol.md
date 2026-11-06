@@ -127,11 +127,20 @@ source lands, and a fetch dataset now carries
 `context.completion_proven: false` so the dataset itself admits it
 (fold R6, 2026-10-26: the gate hook's source is `None`; the field rides
 the dataset's free-form context block because the OTDP dataset schema
-closes its top-level keys). The aux header byte is recorded as evidence;
-its meaning is unproven. The full dated addendum with the probe outputs
-lands in the parent-dir record — `docs/LogicPort-Protocol.md` §5c in the
-logiport workspace one directory above this plugin project (issue #562,
-task 10).
+closes its top-level keys). The header region is `C2 00 <counter>` — three
+bytes — and the count field carries `count - 1`, so the payload is
+`count + 1` bytes and the total is `count + 4`. That length rule is
+resolved. One thing is not: whether byte 3 is the last header byte or the
+first data byte. The 2026-10-29 decode addendum reads it as data (3 header
++ count+1); the sha-pinned golden vectors in `vectors.json` carry exactly
+`count` data bytes after a 4-byte header. Both agree on the total, and
+every golden exchange is zero in that region, so the vectors cannot
+discriminate. `parse_reply` keeps the 4-header split the vectors pin and
+`parse_read_reply` keeps the 3-header split; a hand-recorded exchange with
+non-zero data at byte 3 is the experiment that closes it. The full dated
+addendum with the probe outputs lands in the parent-dir record —
+`docs/LogicPort-Protocol.md` in the logiport workspace one directory above
+this plugin project (issue #562).
 
 The frame carries a 16-bit address field. The one hardware-proven wire
 mapping is status `0x100000` → word `0x0000`. Sample-plane addresses
@@ -141,12 +150,15 @@ low-16. Three documented addresses (`0x1000000`, `0x2000000`,
 (issue #562): `wire_address` MASKS the low 16 bits — every documented
 address encodes and transmits as its low word (`0x40000000` → `0x0000`);
 the adapter does not refuse the colliding addresses. The collision is
-real: mode-based disambiguation is unproven and the page-bits part of
-the decomposition remains the open item `wire_address` is the one place
-to fix when a live probe pins it. The 2026-10-26 read-only probes could
-not discriminate the decomposition (identical zero-data replies at every
-probed address); the discriminating experiment is a register write
-followed by a read-back, an owner-watched step that has not been taken.
+real: mode-based disambiguation is unproven. The discriminating
+experiment HAS now been taken (write, then read-back, 2026-10-28 and
+2026-10-29) and the answer was not the write path: the page select is the
+`C3` frame, which carries the upper 16 bits of the true 32-bit register
+address. Four pages were exercised live — frequency `0x4000`, sample
+`0x0200`, status `0x0010`, mode `0x2000` — and every `C3` acked in grammar
+with the following reads answering on the selected page. `wire_address`
+still masks to the low 16 bits, so the page select is carried separately
+from the address word; that is the shape to converge on.
 
 ## FPGA configuration (record section 5; hardware-proven slot 0, 2026-10-12)
 
@@ -168,6 +180,20 @@ run the resync flush. The adapter locates the `.ccf` from the action input
 `ccf_path` or the `LOGICPORT_CCF` environment variable, verifies the
 SHA-256, and refuses any other bitstream. The file is never bundled.
 
+Two measured facts from the bench (record addendum 76). **The serial rate
+dominates configuration.** An image is about one megabyte: at 460800 the
+stream moves at ~46 kB/s and costs ~23 s, at 3000000 it moves at ~760 kB/s
+and costs ~1.4 s, and the port needs a 4 ms latency timer. `CONFIG_BAUD`
+carries the high rate; drop back to `INIT_BAUD` for the command phase. A
+client on the command baud looks broken beside the vendor application,
+which configures at once.
+
+**Never write the wake byte.** `0x61` to `0x00100000` puts the device into
+the FAULT state: the LED goes dark and only a replug clears it. The vendor
+gates that byte behind a flag no shipped path sets. This plugin sends no
+init write at all; `FORBIDDEN_WAKE_BYTE` and `FORBIDDEN_WAKE_ADDRESS` keep
+the prohibition in one readable place.
+
 ## Sample data (record section 6; static decode plus mock rehearsal only)
 
 Two ping-pong capture pages; each page holds five planes (D0-7, D8-15,
@@ -182,12 +208,18 @@ the capture-gate hook (source `None` — the status-bit gate is retracted,
 see the status addendum) and then reads the trigger-position word,
 computes the page base `(tp + 1 + prescale) mod 0x400`, reads ten plane
 chunks of `(N+1)/2` bytes, de-interleaves, and runs the decode loop.
-No sample byte has been read on hardware: the format is static-decode
-confirmed and rehearsed on the offline mock with constructed fixtures
-only (the hardware probes closed at the FPGA load and the reply grammar —
-see the record's live validation log, loader result and section 10).
+No sample byte had been read on hardware when this section was written.
+That changed on 2026-10-29: the first live capture was taken and the
+plane map was confirmed against a physical signal (record addendum 76).
+A 1 kHz square on `D0` moved exactly one bit of plane `0x1000` across
+1025 of 2048 samples, and moving the signal to `D1` moved the activity
+to the next bit and nothing else. So plane `0x1000` is `D0-D7`, channel
+k is bit k (least significant first), and the five-plane SDR read is the
+one this unit runs. The adapter's decode loop is still the static-decode
+form; it has not been pointed at a live capture, so treat the sample path
+as hardware-corroborated in its geometry and not yet qualified end to end.
 
-## Frequency counter (record section 7: static decode confirmed; not hardware probed)
+## Frequency counter (record section 7: static decode confirmed, HARDWARE VALIDATED 2026-10-29)
 
 The upper page is a four-channel multiplexed counter: `0x40000000` reads
 the ready gate (0 = count ready) and writes the channel select (0-3);
@@ -210,9 +242,25 @@ sequences are also exposed as the typed `read_counter` invoke action —
 one sweep of all four channels under one lock hold (the device's
 round-robin unit), `side_effect: state_change` — the shape a bench
 admits through a per-device allow rule; procedures use the action,
-interactive hosts keep the read parameters. The counter registers were
-never probed on hardware — the decode comes from the static analysis of
-`LogicPort.exe`.
+interactive hosts keep the read parameters.
+
+**Hardware validation, 2026-10-29 (record addendum 76).** The counter was
+dismissed earlier as unvalidated after one bad reading. Swept across the
+channel selects against two known references it is exact:
+
+| Select | Count | Count x 10 | Reference |
+| --- | --- | --- | --- |
+| 33 | 1400 | **14000 Hz** | CLK2 at 14 kHz, exact |
+| 32 | 1300 | 13000 Hz | CLK1, one gate out |
+| 34 | 1400 | 14000 Hz | another route to the clock pair |
+| 0 | 118 | 1180 Hz | D0, whose capture measures 500 Hz |
+
+So the scale is right and the register path works. Two caveats stay on
+record. Segment `0x8000` returns zeros for every read, so `0x4000` is the
+counter bank — the decode's segment `0x8000` does not hold on this unit,
+and the bench result stands as operational truth. And the counter does
+not agree with the capture on D0 (1180 Hz against 500 Hz), so use the
+counter for the clock inputs and trust the capture for data.
 
 ## Reader bounds, trigger position, sequencer (record: confirmed)
 
@@ -222,11 +270,18 @@ trigger position is written as two LE16 words to `0x100004` and
 `0x100006`: +35/-30 for mode flag 1 with clock type 2, +7/-7 then divided
 by the clock type for mode flag 1 with types 1 and 3 (type 4 not
 implemented in the source), +7/-7 with no division when the mode flag is
-not 1. The sequencer plan is fifteen ordered writes per segment at
-`0x200000+` (segment 0) and `0x600000+` (segment 1); per-channel term
-states (0 don't-care, 1 A, 2 B, 3 both) pack into the two 34-bit masks
-most-significant-first; the condition rows drop without active terms and
-the state rows without active state terms.
+not 1. The sequencer plan writes to segment 0 at `0x200000+` and to segment 1 at
+`0x400000+`. The segment 1 base is the 2^22 bank; an earlier revision of this
+document named `0x600000`, which is not a bank the device has.
+
+Per-channel term states pack with channel i at bit i, so channel 0 is the
+least significant bit. The values are 0 for don't care, 1 for plane A, 2 for
+plane B and 3 for both. The condition rows drop without active terms. The
+state rows drop without active state terms.
+
+The four registers at `+0x12`, `+0x1A`, `+0x1F` and `+0x24` belong to the
+Value term, not to the masks. The device gates them on the term record's
+`+0x46` byte, so the plan sends them only when `range_active` is true.
 
 ## Posture notes
 
