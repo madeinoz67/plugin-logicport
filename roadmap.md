@@ -17,13 +17,12 @@ surviving hypothesis. Evidence: `tools/session-2026-11-06-*.json`.
 - [x] UI preset/digest defect fixed (check-preset 4/4, check-ui green)
 - [x] Land on `main` via PR — #10 open, green, awaiting review
 
-## Phase 2 — Tracker fold: RedTeam + lane findings onto #589
+## Phase 2 — Tracker fold: RedTeam + lane findings onto #589 ✅ (2026-11-07)
 
-wave-retention, config-channels, decoders-arming reports received; presets
-row already fixed. Host/SDK defects (dead fetch on `context.dataset_id`,
-preset homes mismatch `ui/presets/` vs `config/presets/`, no decoder
-runner, no `invoke` op in standalone host) land as #589 rows, not plugin
-rows. Non-blocking per principal ruling.
+Folded: three lane reports on #589 (comment 6687015879), the ring-purge
+defect (comment 6687332643, d9's PR-7 carrier), presets row closed at
+d9b4ea2. Routing per principal directive: SDK defects to #589, plugin
+issues local. Non-blocking per ruling.
 
 ## Phase 3 — Vectors rebuild from a real capture
 
