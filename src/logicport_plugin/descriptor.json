@@ -81,29 +81,30 @@
   },
   "parameters": [
     {
-      "name": "rate_word",
-      "description": "Packed C1/C2 rate and clock-select word (LogicPort-Protocol.md section 3.1); the Hz-to-rate-value conversion is an open item",
-      "type": "int",
+      "name": "rate_hz",
+      "description": "Requested sample rate in Hz; selects one row of the 20-row clock table (Technical Reference, Clock bank) and writes its two bytes to the clock bank. The discrete table snaps a between-rows request to the next slower row; the usable range is 1 kHz to 500 MHz.",
+      "type": "float",
       "access": "rw",
-      "semantic": "configuration",
-      "unit": "count",
-      "range": [
-        0,
-        4294967295
-      ],
+      "semantic": "setpoint",
+      "unit": "Hz",
       "hazard_class": "none",
-      "binding": {
-        "kind": "adapter",
-        "key": "rate_word"
-      },
+      "range": [
+        1000.0,
+        500000000.0
+      ],
       "read_policy": {
         "max_age_ms": 0,
-        "destructive": false
+        "destructive": false,
+        "side_effect": "state_change"
       },
       "write_policy": {
         "effect": "setting",
         "completion": "dispatched",
         "retry": "never"
+      },
+      "binding": {
+        "kind": "adapter",
+        "key": "rate_hz"
       }
     },
     {

@@ -54,6 +54,11 @@ FPGA_BITSTREAM_START = 0x04  # bitstream-start byte (Protocol §5 step 7)
 INIT_READ_TIMEOUT_MS = 5000
 INIT_WRITE_TIMEOUT_MS = 5000
 INIT_LATENCY_MS = 4
+#: 460800 everywhere — the rate the WORKING C tool loads at (full_load.c
+#: sets 460800 and streams the whole body successfully, twice on 2026-11-06).
+#: The Technical Reference's load-recipe step 1 claims 3 Mbaud; measured on
+#: this unit the 3 Mbaud load produces an 00/EE alternating filler state,
+#: so the claim is wrong for this hardware. Bench is operational truth.
 INIT_BAUD = 460800
 
 #: Bitstream configuration is the one phase where the serial rate dominates,
@@ -65,11 +70,21 @@ INIT_BAUD = 460800
 #: and an earlier note in these records claimed ~1.4 s at 3 Mbaud, which the
 #: arithmetic does not allow (it implies about 6 Mbaud).
 
-#: A client must NEVER write the wake byte. `0x61` to `0x00100000` puts the
-#: device into the FAULT state: the LED goes dark and only a replug clears
-#: it (record addendum 76). The vendor gates that byte behind a flag no
-#: shipped path sets, and this plugin sends no init write at all. Kept as a
-#: named constant so the prohibition has one obvious place to be read.
+#: TWO registers, one byte value - keep them straight (reconciled against
+#: the record's Part I line "the 0x61 byte ... is the clock register write
+#: at 0x1000000, the slowest clock"):
+#:
+#: - 0x61 to 0x0100_0000 (the mode block's byte 0) is the ENGINE ENABLE -
+#:   rate row 19's byte A, written by the vendor after validate/resync and
+#:   a close/reopen. Proven on this bench (wake_arm.c / clean_run.c,
+#:   2026-10-28: ACK `C1 00 01`, LED ON).
+#: - 0x61 to 0x0010_0000 (the STATUS register) is the FAULT write: LED
+#:   dark, only a replug clears it (addendum 76).
+#:
+#: The fault and the enable differ by one register. Kept as named constants
+#: so neither is ever spelled from memory.
+ENGINE_ENABLE_BYTE = 0x61
+ENGINE_ENABLE_REGISTER = 0x01000000
 FORBIDDEN_WAKE_BYTE = 0x61
 FORBIDDEN_WAKE_ADDRESS = 0x00100000
 
@@ -148,9 +163,14 @@ PAGE_BYTES = 4096
 #: 0x100008 (2^20+8) — the same slot digest that fixed the
 #: trigger-position writes at 0x100004/0x100006.
 REGISTER_THRESHOLD_DAC: int | None = 0x100008
-#: usbWrite40 destinations of the trigger masks (Protocol §5a).
-REGISTER_TRIGGER_MASK_A: int | None = None
-REGISTER_TRIGGER_MASK_B: int | None = None
+#: usbWrite40 destinations of the trigger masks. CLOSED from the bench's
+#: proven configure chain (tools/full_load.c, record "The sequence":
+#: "masks — C3 0x0100, write mask A at 0x0003, mask B at 0x0008"): mask A
+#: is segment 0x0100 offset 0x0003, mask B the same segment offset 0x0008,
+#: each a five-byte usbWrite40 payload (34 channel bits, all-ones proven
+#: as FF FF FF FF 3F).
+REGISTER_TRIGGER_MASK_A: int | None = 0x01000003
+REGISTER_TRIGGER_MASK_B: int | None = 0x01000008
 #: The 1-byte usbWriteByte payload of the C1 rate command (Protocol §5
 #: step 13 routes it through FUN_004ca679); its value is not decoded.
 RATE_COMMAND_PAYLOAD: int | None = None
@@ -158,6 +178,60 @@ RATE_COMMAND_PAYLOAD: int | None = None
 #: recorded as evidence, never interpreted. Register-slot pattern (fold
 #: R10): one assignment pins the decode once a probe observes meaning.
 AUX_SEMANTICS: int | None = None
+
+
+# --- Clock bank and the rate table (Technical Reference §3 "Clock bank",
+# --- "the rate is one row of a 20 row table") ------------------------------
+
+REG_CLOCK_A = 0x20000000  # write 1: clock byte A (the row's decade+coarse)
+REG_CLOCK_B = 0x20000001  # write 1: clock byte B (the fine step)
+
+#: The 20-row rate table (rows 0-19). Row 0 is the vendor's special DDR
+#: path (not offered); rows 1-19 are the usable 500 MHz..1 kHz range.
+#: Each row is (byte_a, byte_b). MEASURED through the rate table; the
+#: bench's working chain writes row 18 (0x51, 0x44).
+RATE_TABLE: tuple[tuple[int, int], ...] = (
+    (0x00, 0x00), (0x00, 0x00), (0x00, 0x00), (0x01, 0x00), (0x11, 0x00),
+    (0x11, 0x11), (0x11, 0x44), (0x21, 0x00), (0x21, 0x11), (0x21, 0x44),
+    (0x31, 0x00), (0x31, 0x11), (0x31, 0x44), (0x41, 0x00), (0x41, 0x11),
+    (0x41, 0x44), (0x51, 0x00), (0x51, 0x11), (0x51, 0x44), (0x61, 0x00),
+)
+
+#: The usable rows' sample periods in seconds, indexed by row (rows 1-19;
+#: row 0 is the not-offered DDR path and carries no period here).
+RATE_PERIODS_S: tuple[float | None, ...] = (
+    None, 2e-9, 4e-9, 5e-9, 1e-8, 2e-8, 5e-8, 1e-7, 2e-7, 5e-7,
+    1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3,
+)
+
+
+def rate_row_for_hz(rate_hz: float) -> int:
+    """The table row whose period is the largest not exceeding ``rate_hz``.
+
+    The table's rows are discrete; a requested rate between rows selects
+    the next slower row (the conservative capture), and a rate faster than
+    row 1 selects row 1 - the specification's single-rate ceiling.
+    """
+    import math
+
+    if not isinstance(rate_hz, (int, float)) or isinstance(rate_hz, bool):
+        raise ValueError("rate must be a number")
+    if not math.isfinite(rate_hz) or rate_hz <= 0:
+        raise ValueError("rate must be positive and finite")
+    # Rows ascend from fast to slow; the fastest row whose frequency does
+    # not exceed the request is the FIRST qualifying row.
+    for row in range(1, 20):
+        period = RATE_PERIODS_S[row]
+        if period is not None and 1.0 / period <= rate_hz:
+            return row
+    return 19
+
+
+def clock_bytes(row: int) -> tuple[int, int]:
+    """The (byte A, byte B) pair of one rate-table row."""
+    if not isinstance(row, int) or isinstance(row, bool) or not 0 <= row < len(RATE_TABLE):
+        raise ValueError("row must index the rate table")
+    return RATE_TABLE[row]
 
 # --- Evidence taxonomy (fold R16, #562) ------------------------------------
 #
@@ -172,6 +246,8 @@ EVIDENCE_COUNTER_GAP = "logicport.counter_gap"
 EVIDENCE_COUNTER_REBASELINED = "logicport.counter_rebaselined"
 EVIDENCE_CAPTURE_GATE = "logicport.capture_gate"
 EVIDENCE_C3_DRAIN = "logicport.c3_drain"
+EVIDENCE_C3_ACK = "logicport.c3_ack"
+EVIDENCE_PRIME = "logicport.prime"
 EVIDENCE_CONFIGURE_PENDING_WRITES = "logicport.configure.pending_writes"
 EVIDENCE_FETCH_DATASET = "logicport.fetch.dataset"
 
@@ -183,6 +259,8 @@ EVIDENCE_KINDS = frozenset(
         EVIDENCE_COUNTER_REBASELINED,
         EVIDENCE_CAPTURE_GATE,
         EVIDENCE_C3_DRAIN,
+        EVIDENCE_C3_ACK,
+        EVIDENCE_PRIME,
         EVIDENCE_CONFIGURE_PENDING_WRITES,
         EVIDENCE_FETCH_DATASET,
     }
@@ -405,6 +483,26 @@ def wire_address(register: int) -> int:
     if not isinstance(register, int) or isinstance(register, bool) or register < 0:
         raise ValueError("register must be a nonnegative int")
     return register & 0xFFFF
+
+
+def segment_of(register: int) -> int:
+    """The C3 page select for a 32-bit register address: ``addr >> 16``.
+
+    The record settles this in two places: the register map (§C, "a
+    register is selected by a ``C3`` frame carrying ``addr >> 16`` (the
+    segment, cached in ``_DAT_005977e8``)"), and the static decode's
+    ``Int(reg/65536)`` comparison against that same cache. A framed
+    command whose segment differs from the device's cached select reads
+    the wrong page — every register read returns zeros without it, which
+    is why the 2026-10-26 probes concluded there was no address on the
+    wire when the frame was in fact missing entirely.
+    """
+    if not isinstance(register, int) or isinstance(register, bool) or register < 0:
+        raise ValueError("register must be a nonnegative int")
+    segment = register >> 16
+    if segment > 0xFFFF:
+        raise ValueError("segment does not fit the 16-bit select field")
+    return segment
 
 
 def sample_plane_wire_address(plane: int, page_base: int) -> int:
@@ -751,6 +849,32 @@ def parse_write_ack(data: bytes) -> ReplyFrame:
     return ReplyFrame(data[0], data[2], 0, b"")
 
 
+def parse_c3_ack(data: bytes) -> ReplyFrame:
+    """Parse the 3-byte page-select ACK ``C3 00 <counter>``.
+
+    The record proves this grammar on hardware: "The C3 ACK grammar is
+    proven: 3 bytes (C3 echo, 00, counter)", with ``C3 00 01``,
+    ``C3 00 32`` and ``C3 00 5B`` observed across a run, and the counter
+    staying continuous across ``C1`` and ``C3`` frames.
+
+    The adapter used to DRAIN this reply instead of parsing it (fold R3,
+    whose premise was that the C3 reply shape was unproven — it is now
+    proven, so the premise is gone). Draining was not harmless: the
+    device increments its counter on a C3, so a drained ACK leaves the
+    adapter's counter view one behind and the next parsed reply trips a
+    phantom gap refusal.
+    """
+    if not isinstance(data, bytes):
+        raise ValueError("a reply is bytes")
+    if len(data) != WRITE_ACK_BYTES:
+        raise ValueError(f"the C3 ACK is exactly {WRITE_ACK_BYTES} bytes")
+    if data[0] != CMD_STOP:
+        raise ValueError(f"C3 ACK echo {data[0]:#04x} != {CMD_STOP:#04x}")
+    if data[1] != 0:
+        raise ValueError(f"C3 ACK second byte {data[1]:#04x} is not 0x00")
+    return ReplyFrame(data[0], data[2], 0, b"")
+
+
 def parse_read_reply(data: bytes, count: int) -> tuple[int, bytes]:
     """Split an observed read reply into ``(counter, data)``.
 
@@ -857,13 +981,9 @@ def ftdi_set_latency(ms: int = INIT_LATENCY_MS) -> dict:
 
 
 def ftdi_set_baud(baud: int = INIT_BAUD) -> dict:
-    """FT_SetBaudRate. Default and only used value is 460800.
-
-    The configuration stream is rate-bound: 460800 at 8N1 carries 46,080 B/s,
-    so a 1,057,840-byte slot takes 22.96 s. Raising the rate would shorten it
-    (3 Mbaud gives 300,000 B/s and a 3.53 s floor) but no faster path is
-    implemented here, and the plugin never sends anything but ``INIT_BAUD``.
-    """
+    """FT_SetBaudRate. ``INIT_BAUD`` (460800) for the command phase,
+    ``LOAD_BAUD`` (3 Mbaud, the Technical Reference's load-recipe step 1)
+    for the FPGA bitstream phase."""
     if not isinstance(baud, int) or isinstance(baud, bool) or baud < 1:
         raise ValueError("baud must be positive")
     return ftdi_control("set_baud", baud=baud)

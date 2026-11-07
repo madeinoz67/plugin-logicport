@@ -1,7 +1,7 @@
 {
   "contract_version": "0.4.0",
   "plugin_id": "intronix.logicport",
-  "descriptor_sha256": "9299eb0ea1e6101c3697f15ff4ab1ec0f28a8a5ac96525101345d01f18825d01",
+  "descriptor_sha256": "0f524f80f8b2066100a7eaf11f27005998e712254aa6ec67f7ba943200912599",
   "bindings": [
     {
       "id": "capture",
@@ -306,9 +306,9 @@
   ],
   "assets": [
     {
-      "id": "settings/configure.schema.json",
-      "path": "settings/configure.schema.json",
-      "sha256": "9be6382423fb0d3d88c86cd01014ce33faa0832f721832c117f564f453771f41"
+      "id": "settings/logic-analyser-configure.schema.json",
+      "path": "settings/logic-analyser-configure.schema.json",
+      "sha256": "1c5d665667e7dc0b497e3814fc81912f07b5ad8dd05770b2d00eccd9c4afbc7f"
     }
   ],
   "extensions": {

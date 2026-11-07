@@ -1,6 +1,6 @@
 {
   "contract_version": "0.4.0",
-  "descriptor_sha256": "9299eb0ea1e6101c3697f15ff4ab1ec0f28a8a5ac96525101345d01f18825d01",
+  "descriptor_sha256": "0f524f80f8b2066100a7eaf11f27005998e712254aa6ec67f7ba943200912599",
   "targets": [
     {
       "id": "capture",
@@ -232,7 +232,7 @@
         "otdp.logic_analyser/1.0.0"
       ],
       "input_schema_id": "urn:otdp:action:logic_analyser.configure:1.0.0:input",
-      "schema_asset_id": "settings/configure.schema.json",
+      "schema_asset_id": "settings/logic-analyser-configure.schema.json",
       "preset_asset_ids": []
     },
     {

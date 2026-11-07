@@ -22,21 +22,22 @@ long-term conformance home for the control dialect below.
 Every command is a 5-byte header plus payload, then a response wait.
 
 - `C1 w0 w1 L0 L1 [payload…]` — write. The 16-bit little-endian word is
-  the register address, or the packed rate+clock-select value for the rate
-  command (low 16 bits rate, `Int(value/65536)` clock select). The payload
-  is `L+1` bytes: `usbWriteByte` (1), `usbWriteWord` (2 LE),
+  the register address's low half (the page select is carried separately
+  by the C3 frame — see the page-select section). The RETIRED
+  rate-command reading ("packed rate+clock-select value") is gone: the
+  rate is the clock bank's two row bytes (see the sample-rate section).
+  The payload is `L+1` bytes: `usbWriteByte` (1), `usbWriteWord` (2 LE),
   `usbWriteDword` (4 LE), `usbWrite40` (5 LE, carries 34-bit trigger
-  masks and dwell values). After each write the host drains the ACK bytes
-  — a quiet line is acceptable; the ACK's exact length is an open item.
-  (Both ACK sentences are superseded by the reply-grammar addendum
-  below — dated 2026-10-26, issue #562: the ACK is exactly 3 bytes, no
-  quiet-line drain.)
-- `C2 w0 w1 n0 n1` — read request; the device answers with `n` bytes.
-  Response VALUES are big-endian (`usbReadWord`, `usbReadDword`).
-  (The answer length is superseded by the same addendum: the reply is
-  `n + 4` bytes, header plus payload.)
-- `C3 w0 w1 00 00` — stop; the rate bytes carry the cached rate. The host
-  sends it before a rate change and after capture errors.
+  masks and dwell values). The ACK is exactly 3 bytes `C1 00 <counter>`
+  (reply-grammar addendum, 2026-10-26, issue #562).
+- `C2 w0 w1 n0 n1` — read request; the device answers with `n + 4` bytes
+  (`C2 00 <counter> <first payload byte>` then payload; response VALUES
+  are big-endian).
+- `C3 w0 w1 00 00` — page select: `w0 w1` is the register page
+  (`addr >> 16`, little-endian). The reply is exactly 3 bytes
+  `C3 00 <counter>` (proven 2026-10-28). Selects are sent on page change
+  only, and a select is always followed by the page's own WRITE before
+  any read (addendum 32's rule).
 
 ### Reply grammar (dated addendum, 2026-10-26, issue #562)
 
@@ -182,6 +183,23 @@ run the resync flush. The adapter locates the `.ccf` from the action input
 `ccf_path` or the `LOGICPORT_CCF` environment variable, verifies the
 SHA-256, and refuses any other bitstream. The file is never bundled.
 
+**Load exactly ONE image, and the default is image 7 (2026-11-06).**
+The eight slots are eight ALTERNATIVE images, not eight parts of one —
+`docs/LogicPort-Technical-Reference.md` §"The eight images, one entry each"
+(evidence current 2026-10-30) and `docs/LogicPort-Client-Guide.md`: "Load one
+image, never all eight... A single stream of the whole body faulted the
+device." Image 7 is the triggered-capture internal-clock image, "the image
+the bench used for all working captures"; image 6 is its twin; slot 0 is a
+timing mode with no established purpose.
+
+The 2026-10-29 bench addendum's "a client must load all eight slots"
+was superseded by the image matrix: `tools/full_load.c` streams the whole
+body and reaches a working dialect only because the FPGA configures on the
+LAST image it receives — slot 7. A slot-0 load asserts DONE (the FPGA
+boots) yet answers the command dialect with `EE`/`EF` filler forever
+(measured 2026-11-06: `ee`/`ef` on every read across two replugs). The
+adapter therefore keeps the single-image load and defaults `slot` to 7.
+
 Two measured facts from the bench (record addendum 76). **The serial rate
 dominates configuration, and the arithmetic is unforgiving.** At 460800 baud,
 8N1 costs ten bit times per byte, so the line carries 46,080 B/s and a
@@ -202,11 +220,14 @@ timeouts today, so the declared parameter range admits work the governing
 budget forbids. That is a host-side gap, tracked on issue #589, not a plugin
 defect: narrowing the range here would hide it.
 
-**Never write the wake byte.** `0x61` to `0x00100000` puts the device into
-the FAULT state: the LED goes dark and only a replug clears it. The vendor
-gates that byte behind a flag no shipped path sets. This plugin sends no
-init write at all; `FORBIDDEN_WAKE_BYTE` and `FORBIDDEN_WAKE_ADDRESS` keep
-the prohibition in one readable place.
+**0x61 is two registers, one byte apart.** `0x61` to `0x0010_0000` (the
+STATUS register) is the FAULT write: LED dark, only a replug clears it
+(addendum 76). The same byte to `0x0100_0000` (the mode block's byte 0) is
+the ENGINE ENABLE — rate row 19's byte A, which the vendor writes after
+validate/resync and a close/reopen (decode lane §12; proven on this bench
+2026-10-28, `wake_arm.c`: ACK `C1 00 01`, LED ON). `FORBIDDEN_WAKE_*` and
+`ENGINE_ENABLE_*` keep both spellings named; neither is ever typed from
+memory.
 
 ## Sample data (record section 6; static decode plus mock rehearsal only)
 

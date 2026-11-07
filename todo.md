@@ -1,0 +1,53 @@
+# todo — active section (Phase 1 close-out + Phase 2 fold)
+
+- [x] Branch fix/c-tool-parity-fold committed (d9b4ea2); issue #9 + PR #10
+      open; suite 138/2 + check + check-ui + verify-ui green; merge awaits
+      review (self-merge denied by the harness — principal's word needed)
+- [x] Lane fold posted to #589 (comment 6687015879, STE register): capture
+      path, configuration, decoders rows + presets row closed at d9b4ea2
+- [x] Addendum 77 appended to the protocol record: seven measured deltas,
+      the once-only prime result, driver-layer hypothesis named
+- [x] Fork DISSOLVED by measurement: pyftdi_full_load.py talks (counters
+      00-08) - driver exonerated, fault is the SDK transport wrapping
+- [x] Bisect round 1 DONE: ring-purge defect isolated (purge clears the
+      FTDI buffer, not the SerialLink ring); filed SDK-side on #589
+      (comment 6687332643); d9 carries it as PR-7 behind PR-1 with a
+      reader-quiesce arm. Plugin-side drain loop reverted - grammar and
+      mock both refuse a healthy starved drain; suite back to 138/2
+- [x] Trigger-mask slots pinned from the proven chain (0x01000003/0x01000008,
+      seg 0x0100); set_trigger un-refused through the selecting priming
+      write; suite 138/2, check exit 0
+- [x] Rate decode: packed-word model RETIRED; rate_hz parameter selects a
+      row of the 20-row clock table (TR) and writes bytes A/B to the clock
+      bank via select-and-prime; descriptor + all pins repinned; suite
+      138/2, check/check-ui/verify-ui all 0
+- [x] Client Guide section 6 ported to pyftdi_full_load.py chain: the
+      engine RUNS (cursor advances and wraps, exit-prefill completes,
+      cursor-relative fetch returns 256B) - full_load's static cursor was
+      the missing 0x000A exit-prefill write
+- [x] Flat-window root-cailed to the doc records: the engine never starts
+      (cursor static at 6 BEFORE completion; full 2048B ring all-idle bf;
+      status 00 = pre-fill per the lane's phase bits). The decode lane
+      names the missing enable: close/reopen + C1 0x100000<-0x61 ("the
+      input-conditioning/sample-engine enable the session was missing")
+- [x] Fork RESOLVED on paper (no hardware risk): the lane's enable is
+      0x61 to 0x0100_0000 (mode block byte 0 = rate row 19's byte A,
+      vendor writes it after a close/reopen; proven 2026-10-28, ACK C1 00
+      01, LED ON); addendum 76's fault is the SAME byte to 0x0010_0000
+      (status). One register apart. Constants renamed in protocol.py
+- [ ] Bench go (principal): the enable is STAGED behind --enable in
+      pyftdi_full_load.py (close/reopen, C3 mode page, 0x61 to 0x0100_0000,
+      ACK printed). Your go = one run of `chain --enable`. Regression run
+      without the flag is clean. [memory files written 2026-11-07]
+- [x] PR-7 (SDK #239) validated on hardware PRE-MERGE from the pr7-builder
+      worktree in a scratch venv: first plugin read through the transport
+      EVER (trigger_position ok); stale-ring echo class gone; comment
+      6690919120 on the PR carries the evidence. Remaining failures are
+      reply-pacing shaped (plugin-side row below)
+- [x] 239 MERGED; reply pacing landed (40 x 25 ms, the C tools' 900 ms
+      window): status AND trigger_position both read OK through the plugin
+      (session-2026-11-07-two-reads-ok.json); read_counter's refusal is an
+      honest counter gap after configure's 60 s budget miss (#589 row);
+      read_samples awaits the engine enable
+- [ ] Phase 3: vectors rebuild from a clean capture (needs configure inside
+      its budget + the engine enable go)
