@@ -70,9 +70,12 @@
       ruff clean)
 - [x] Bank the reopen-desync law to KNOWLEDGE — written
       (logicport-reopen-desyncs-the-pyftdi-stream.md)
-- [ ] Phase 3 prep: read-only capture mode in scripts/record_device_session.py
-      (cursor/status/plane reads, no writes) so a clean journal is one
-      command once the engine runs
+- [x] Phase 3 prep: `--read-only` mode in scripts/record_device_session.py
+      (e32c43d, hardware-smoked). FINDING: a fresh plugin session without
+      configure answers the ee class to its first C2 read — the resync
+      rite rides configure_fpga (addendum 79 corollary). Read-only
+      journaling of a live engine needs the rite split out of configure,
+      or the raw tool's session
 - [ ] d9 test-vehicle work when the #596 slice lands — PRIORITY OVERRIDES
       ALL LOCAL ROWS the moment a request arrives (principal directive
       2026-11-07); rows appear here as they come in
