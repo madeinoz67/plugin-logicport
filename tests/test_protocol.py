@@ -8,6 +8,13 @@ table; the bitstream body is synthetic. No hardware is contacted.
 import pytest
 
 from logicport_plugin import protocol as proto
+from logicport_plugin.protocol import (
+    CMD_READ,
+    CMD_WRITE,
+    ReplyFrame,
+    parse_reply,
+    parse_write_ack,
+)
 
 # The real LogicPort.ccf header line (SHA-256 9298a5ea...; record section 9).
 REAL_CCF_HEADER = (
@@ -524,11 +531,6 @@ def test_wire_address_families_low16():
 
 # --- Fold-in round 3 (RED first): the reply grammar (hardware-proven
 # 2026-10-26 wire truth, issue #562 / tools/write_probe.c). ---
-
-from logicport_plugin.protocol import (
-    ReplyFrame, parse_reply, parse_write_ack, CMD_READ, CMD_WRITE,
-)
-import pytest
 
 def test_parse_reply_real_probe_bytes():
     # Hand-recorded from the 2026-10-26 addr_probe run (count=4 @ 0x0000):

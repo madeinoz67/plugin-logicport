@@ -8,5 +8,19 @@ requires-python = ">=3.13"
 dependencies = []
 [project.optional-dependencies]
 test = ["benchweave-sdk[scaffold,server]==0.24.0", "pytest>=8.0"]
+lint = ["ruff>=0.6"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# docs/ carries one-liner helper scripts (diagram generators, audits), not
+# shipped code — same posture as the SDK's own ruff config.
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+# Basic CI: the classic minimal set (pycodestyle errors + pyflakes). The
+# scaffolded tree was never linted; wider profiles are a later decision,
+# not a birth-red gate.
+select = ["E4", "E7", "E9", "F"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/logicport_plugin"]

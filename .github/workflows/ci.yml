@@ -1,0 +1,28 @@
+# Basic CI: lint (ruff, default rule set) + tests (pytest on 3.13).
+# Added post-#10: PR #10 merged with no check rollup because the scaffold
+# ships no CI (filed SDK-side on the gateway tracker). This file is the
+# local stopgap until the copier template carries one.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.13
+      - run: uv run ruff check .
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.13
+      - run: uv sync --extra test
+      - run: uv run pytest -q

@@ -16,7 +16,7 @@ import jsonschema
 import pytest
 from benchweave_sdk.conformance import check_lifecycle
 from benchweave_sdk.testing import MockContext, MockHost
-from benchweave_sdk.validation import validate_descriptor, validate_result
+from benchweave_sdk.validation import validate_result
 
 from logicport_plugin import adapter, protocol as proto
 from logicport_plugin.adapter import create_plugin
