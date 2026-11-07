@@ -14,16 +14,18 @@
 
 ## Active
 
-- [x] Standalone slice REHEARSED on the live server (2026-11-07, port 8479):
-      serve --transport mock + discover + connect + parameter_read all PASS
-      (status=25, quality valid, bearer-authed REST). parameter_apply FAILS
-      at vectors row `freq-a-select`: adapter now sends C3 02 00 (page
-      select, the rate rework's select-and-prime) but the stale vectors row
-      expects C1 00 00 00 00 00 — the vectors predate the rate-model
-      rebuild. This is Phase 3's exact scope, with the first failing row
-      now NAMED. Capture leg blocked behind apply. read_samples itself is
-      adapter-proven against the mock exchange (test_invoke_read_samples_
-      exact_exchange, green in suite).
+- [x] Standalone slice REHEARSED END TO END on the live server (2026-11-07,
+      two serves): discover + connect + parameter_read PASS (status=25,
+      quality valid). parameter_apply REFUSED at stale vectors row
+      `freq-a-select` (adapter sends the rate rework's C3 page-select; the
+      row predates it). capture_start RUNS (cap-db5d7561c36e, state
+      capturing, count-bound 64) and aborts at finalise with
+      `finalise_refused` — the same stale-vectors wall at the read path.
+      MCP surface mapped too (23 bws_v1 tools; capture_start needs
+      device_id + count/duration_s bound). One root cause for both legs:
+      vectors freshness = Phase 3 = engine running = the force-trigger go.
+      read_samples itself is adapter-proven against the mock exchange
+      (green suite test).
 - [ ] d9 test-vehicle work when a request arrives — PRIORITY OVERRIDES ALL
       LOCAL ROWS (principal directive); blocked-on-SDK/gateway items get
       messaged to the d9 session for THEIR todo, per the same directive.
