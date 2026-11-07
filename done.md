@@ -81,3 +81,13 @@
 - Recorder --read-only mode (resync preamble); two addendum 79 corollaries;
   adapter prime question answered (adapter.py:1011 — prime IS composed);
   the real gap is armed device state.
+
+## 2026-11-07 — #596 delivered by the SDK lane
+
+- benchweave #596 CLOSED (comment 6703191445): copier scaffold now ships
+  .github/workflows/ci.yml (lint + tests, uv, 3.13); generated pyproject
+  gains a lint extra + explicit ruff select; the lint-extra-before-ruff law
+  is structural (install step at a lower index than the tool step, with a
+  test asserting it); a Windows updater conflict-block defect was found and
+  fixed in the same PR. Open obligation: gateway PINNED_FILE_SET gains the
+  workflow file in the pointer PR after the next tagged SDK release.
