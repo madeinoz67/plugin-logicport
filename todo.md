@@ -71,11 +71,15 @@
 - [x] Bank the reopen-desync law to KNOWLEDGE — written
       (logicport-reopen-desyncs-the-pyftdi-stream.md)
 - [x] Phase 3 prep: `--read-only` mode in scripts/record_device_session.py
-      (e32c43d, hardware-smoked). FINDING: a fresh plugin session without
-      configure answers the ee class to its first C2 read — the resync
-      rite rides configure_fpga (addendum 79 corollary). Read-only
-      journaling of a live engine needs the rite split out of configure,
-      or the raw tool's session
+      (9dcbf54, smoked twice on hardware). Findings banked as addendum 79
+      corollaries: (1) fresh session without the rite answers the ee class;
+      (2) standalone resync re-establishes the exchange (ee -> 0x00 echo)
+      but does NOT reach read-capable state — the load-tail N=1 prime or
+      configured state is the remaining ingredient
+- [ ] Adapter question (mock-testable, no device): does _resync_flush
+      include the load-tail N=1 eight-read prime? If not, compose it in —
+      the two-reads-ok evidence says prime+configured = reads work; this
+      is the split that would make read-only journaling possible
 - [ ] d9 test-vehicle work when the #596 slice lands — PRIORITY OVERRIDES
       ALL LOCAL ROWS the moment a request arrives (principal directive
       2026-11-07); rows appear here as they come in
