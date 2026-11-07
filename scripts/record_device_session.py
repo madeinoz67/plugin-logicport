@@ -105,6 +105,11 @@ def main(out_path: str) -> int:
 
         svc.transfer = logged
         read_only = "--read-only" in sys.argv
+        # Read-only mode still needs the session-establishment rite: the
+        # 2026-11-07 corollary (addendum 79) showed a fresh plugin session
+        # without it answers the ee class to its first C2 read. The plugin's
+        # standalone `resync` action IS that rite without the FPGA load —
+        # it re-establishes the exchange without touching device state.
         steps = (
             [
                 (
@@ -119,7 +124,7 @@ def main(out_path: str) -> int:
                 ),
             ]
             if not read_only
-            else []
+            else [("invoke", {"action_id": "resync", "input": {"attempts": 1}})]
         ) + [
             ("read", {"parameter": "status"}),
             ("read", {"parameter": "trigger_position"}),
