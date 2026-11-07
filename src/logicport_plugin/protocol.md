@@ -223,11 +223,25 @@ defect: narrowing the range here would hide it.
 **0x61 is two registers, one byte apart.** `0x61` to `0x0010_0000` (the
 STATUS register) is the FAULT write: LED dark, only a replug clears it
 (addendum 76). The same byte to `0x0100_0000` (the mode block's byte 0) is
-the ENGINE ENABLE — rate row 19's byte A, which the vendor writes after
-validate/resync and a close/reopen (decode lane §12; proven on this bench
-2026-10-28, `wake_arm.c`: ACK `C1 00 01`, LED ON). `FORBIDDEN_WAKE_*` and
-`ENGINE_ENABLE_*` keep both spellings named; neither is ever typed from
+the ENGINE ENABLE — rate row 19's byte A (decode lane §12; proven on this
+bench 2026-10-28, `wake_arm.c`: ACK `C1 00 01`, LED ON). `FORBIDDEN_WAKE_*`
+and `ENGINE_ENABLE_*` keep both spellings named; neither is ever typed from
 memory.
+
+**The enable is accepted on a live session, without the reopen (addendum 79,
+2026-11-07).** The vendor's close/reopen step is UNUSABLE from pyftdi as
+written: every frame after a mid-session reopen acks `ee0000` (desync
+signature — the C3 page select itself refuses; `ee0000` marks a desynced
+exchange, not only a refused write). On one continuous session the enable
+acks `c30009` / `c1000a` — accepted. Two ordering laws: the enable must be
+the LAST mode-page write (the chain's own `0x0C` timing-mode byte sits at
+the same register `0x0100_0000` and clobbers an earlier enable), and the
+resync flush (0x00 filler + purge + prime) is the session-establishment
+rite a reopen does not repeat. With the enable in, the ring's first live
+bytes appeared (0xfe/0xff, D0 edges — the 100 Hz signal is in the ring),
+while the engine still holds pre-fill: cursor static, status `00`,
+exit-prefill (`0x0010_000A`) does not transition the phase. The staged next
+probe is the force-trigger phase register `0x0010_000B`.
 
 ## Sample data (record section 6; static decode plus mock rehearsal only)
 
