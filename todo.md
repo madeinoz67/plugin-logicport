@@ -14,10 +14,16 @@
 
 ## Active
 
-- [ ] Working standalone plugin, next ungated slice: read_samples
-      end-to-end against the MOCK (rehearsal shape), so the standalone
-      story (serve + connect + read + apply + capture) is complete on
-      recorded bytes while the bench gates wait.
+- [x] Standalone slice REHEARSED on the live server (2026-11-07, port 8479):
+      serve --transport mock + discover + connect + parameter_read all PASS
+      (status=25, quality valid, bearer-authed REST). parameter_apply FAILS
+      at vectors row `freq-a-select`: adapter now sends C3 02 00 (page
+      select, the rate rework's select-and-prime) but the stale vectors row
+      expects C1 00 00 00 00 00 — the vectors predate the rate-model
+      rebuild. This is Phase 3's exact scope, with the first failing row
+      now NAMED. Capture leg blocked behind apply. read_samples itself is
+      adapter-proven against the mock exchange (test_invoke_read_samples_
+      exact_exchange, green in suite).
 - [ ] d9 test-vehicle work when a request arrives — PRIORITY OVERRIDES ALL
       LOCAL ROWS (principal directive); blocked-on-SDK/gateway items get
       messaged to the d9 session for THEIR todo, per the same directive.
