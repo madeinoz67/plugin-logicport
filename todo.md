@@ -61,5 +61,20 @@
       without the lint extra), fixed 2f0a244, run 42323637809 GREEN
 - [x] SDK-scaffold CI gap communicated: benchweave issue #596 (STE
       register) — copier template should ship a lint+tests workflow
+- [ ] Stage `--force-trigger` in pyftdi_full_load.py (0x0010_000B<-0x01,
+      the vendor's pre-fill->trigger phase register) behind a flag, ready
+      for the go — local tool code only, no device write until the word
+- [ ] Protocol addendum 79: reopened-pyftdi-stream desync (ee0000 on every
+      frame post-reopen), enable accepted live (c30009/c1000a), first D0
+      edges in the ring, pre-fill hold. Plugin protocol.md Part I edited in
+      the same pass (living-protocol-docs directive)
+- [ ] Bank the reopen-desync law to KNOWLEDGE — it governs every pyftdi
+      session on this device, not just the enable path
+- [ ] Phase 3 prep: read-only capture mode in scripts/record_device_session.py
+      (cursor/status/plane reads, no writes) so a clean journal is one
+      command once the engine runs
+- [ ] d9 test-vehicle work when the #596 slice lands — PRIORITY OVERRIDES
+      ALL LOCAL ROWS the moment a request arrives (principal directive
+      2026-11-07); rows appear here as they come in
 - [ ] Phase 3: vectors rebuild from a clean capture (needs configure inside
       its budget + the engine enable go)
