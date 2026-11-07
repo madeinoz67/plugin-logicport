@@ -36,10 +36,15 @@
       vendor writes it after a close/reopen; proven 2026-10-28, ACK C1 00
       01, LED ON); addendum 76's fault is the SAME byte to 0x0010_0000
       (status). One register apart. Constants renamed in protocol.py
-- [ ] Bench go (principal): the enable is STAGED behind --enable in
-      pyftdi_full_load.py (close/reopen, C3 mode page, 0x61 to 0x0100_0000,
-      ACK printed). Your go = one run of `chain --enable`. Regression run
-      without the flag is clean. [memory files written 2026-11-07]
+- [x] Bench go EXECUTED (2026-11-07, 3 runs, tee'd in ../tools/enable-run*):
+      run 1+2 — the close/reopen DESYNCS the reopened pyftdi stream (both
+      C3 select and enable ack ee0000); ALSO run 1's mode write 0x0C at
+      0x0100_0000 clobbered the enable byte (tool now writes enable LAST on
+      the mode page). Run 3 WITHOUT reopen: C3 ack c30009, 0x61 ack c1000a
+      (ACCEPTED), first live D0 edges ever (0xfe/0xff in the ring). Engine
+      still holds pre-fill: cursor static 1795, status 00, exit-prefill did
+      not transition. NEXT PROBE (needs go): force trigger 0x0010_000B<-0x01,
+      the vendor's pre-fill->trigger phase register.
 - [x] PR-7 (SDK #239) validated on hardware PRE-MERGE from the pr7-builder
       worktree in a scratch venv: first plugin read through the transport
       EVER (trigger_position ok); stale-ring echo class gone; comment
