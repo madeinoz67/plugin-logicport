@@ -2,12 +2,11 @@
 
 ## Deferrals (owner named, not silent holds)
 
-- [ ] DEFERRED → PRINCIPAL: the ONE-RUN discriminator cascade (staged,
-      py_compile clean): `chain --enable --force-trigger --disarm-probe`
-      writes the enable, then force-trigger 0x0010_000B<-0x01; if the
-      phase still reads 00 at completion it then disarms 0x0010_0003<-0x00
-      and re-reads status (placed after the fetch so capture evidence
-      survives). Both prior gated probes are now this single command.
+- [ ] DEFERRED → PRINCIPAL (HANDS): power-cycle the LogicPort (unplug,
+      replug), then say "ran" — I run the plain chain immediately after.
+      The cascade elimination (addendum 80) closed every software theory;
+      one-shot-after-power-up is the surviving hypothesis. The 11-06 run
+      that worked was likely the first on a fresh device state.
 - [ ] DEFERRED → PRINCIPAL: six iCloud sync duplicates (`* 2.*` files) —
       one rm pass when you say.
 
