@@ -2,13 +2,12 @@
 
 ## Deferrals (owner named, not silent holds)
 
-- [ ] DEFERRED → PRINCIPAL: force-trigger probe (staged, one run):
-      `chain --enable --force-trigger` writes 0x0010_000B<-0x01 (vendor
-      pre-fill->trigger phase register). The engine holds pre-fill; this is
-      the likely phase-advancer. Awaits the word.
-- [ ] DEFERRED → PRINCIPAL: disarm probe (0x0010_0003<-0x00) on a resynced
-      armed device, then re-read status. Discriminates armed-state read
-      refusal vs deeper desync.
+- [ ] DEFERRED → PRINCIPAL: the ONE-RUN discriminator cascade (staged,
+      py_compile clean): `chain --enable --force-trigger --disarm-probe`
+      writes the enable, then force-trigger 0x0010_000B<-0x01; if the
+      phase still reads 00 at completion it then disarms 0x0010_0003<-0x00
+      and re-reads status (placed after the fetch so capture evidence
+      survives). Both prior gated probes are now this single command.
 - [ ] DEFERRED → PRINCIPAL: six iCloud sync duplicates (`* 2.*` files) —
       one rm pass when you say.
 
