@@ -76,10 +76,18 @@
       (2) standalone resync re-establishes the exchange (ee -> 0x00 echo)
       but does NOT reach read-capable state — the load-tail N=1 prime or
       configured state is the remaining ingredient
-- [ ] Adapter question (mock-testable, no device): does _resync_flush
-      include the load-tail N=1 eight-read prime? If not, compose it in —
-      the two-reads-ok evidence says prime+configured = reads work; this
-      is the split that would make read-only journaling possible
+- [x] Adapter question ANSWERED by code read (adapter.py:1011): _resync_flush
+      DOES compose the load-tail N=1 prime. The prime is not the missing
+      ingredient — smoke 2 ran resync+prime and still got 0x00 echoes. The
+      remaining gap is DEVICE STATE: the smoke device is armed + holding
+      pre-fill (run 3), and configure's chain carries the UNCONFIGURE
+      (0x00 -> 0x00100000) and disarm steps that resync deliberately lacks.
+      An armed device answering 0x00/0x03 echoes to C2 reads is unproven
+      behavior, not a plugin defect
+- [ ] Armed-device read probe (GATED, device writes): disarm
+      (0x0010_0003<-0x00) on a resynced armed device, then re-read status.
+      Discriminates armed-state refusal vs deeper desync. Needs the go
+      (disarm is a write class not yet sanctioned solo)
 - [ ] d9 test-vehicle work when the #596 slice lands — PRIORITY OVERRIDES
       ALL LOCAL ROWS the moment a request arrives (principal directive
       2026-11-07); rows appear here as they come in
