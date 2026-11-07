@@ -2,11 +2,11 @@
 
 ## Deferrals (owner named, not silent holds)
 
-- [ ] DEFERRED → PRINCIPAL (HANDS): power-cycle the LogicPort (unplug,
-      replug), then say "ran" — I run the plain chain immediately after.
-      The cascade elimination (addendum 80) closed every software theory;
-      one-shot-after-power-up is the surviving hypothesis. The 11-06 run
-      that worked was likely the first on a fresh device state.
+- [ ] DEFERRED → PRINCIPAL (HANDS): ONE more power-cycle (the last runs'
+   no-op streams jammed the RX; nothing software clears it). On "ran" I
+   fire `cfull` as the FIRST action on the fresh device — the
+   capture_full.c port with unconfigure + chunked flush + re-assert
+   (addendum 81). That is the complete discriminator.
 - [ ] DEFERRED → PRINCIPAL: six iCloud sync duplicates (`* 2.*` files) —
       one rm pass when you say.
 
