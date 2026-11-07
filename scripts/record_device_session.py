@@ -12,7 +12,13 @@ the ``src/logicport_plugin/vectors.json`` shape. Byte-level, so it
 captures whatever the device really puts on the wire, including unpaired
 writes and replies that arrive in an unexpected length.
 
-Usage:  uv run python scripts/record_device_session.py OUT.json
+Usage:  uv run python scripts/record_device_session.py OUT.json [--read-only]
+
+``--read-only`` skips the ``configure_fpga`` chain and journals only the
+read-class steps (status, trigger_position, read_counter, read_samples).
+Use it to capture the exchanges of a LIVE device state — once the engine
+is running, a configure would reset it; a read-only journal preserves the
+state while recording what it puts on the wire.
 """
 
 from __future__ import annotations
@@ -98,17 +104,23 @@ def main(out_path: str) -> int:
             return outcome
 
         svc.transfer = logged
-        steps = [
-            (
-                "invoke",
-                {
-                    "action_id": "configure_fpga",
-                    "input": {
-                        "attempts": 1,
-                        "ccf_path": "/Users/seaton/Documents/src/logiport/extracted/files/LogicPort.ccf",
+        read_only = "--read-only" in sys.argv
+        steps = (
+            [
+                (
+                    "invoke",
+                    {
+                        "action_id": "configure_fpga",
+                        "input": {
+                            "attempts": 1,
+                            "ccf_path": "/Users/seaton/Documents/src/logiport/extracted/files/LogicPort.ccf",
+                        },
                     },
-                },
-            ),
+                ),
+            ]
+            if not read_only
+            else []
+        ) + [
             ("read", {"parameter": "status"}),
             ("read", {"parameter": "trigger_position"}),
             ("invoke", {"action_id": "read_counter", "input": {}}),
