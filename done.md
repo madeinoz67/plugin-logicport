@@ -58,3 +58,26 @@
   (duplicate mid-file import block in test_protocol.py) plus an unused
   import; suite stayed 138/2.
 - Scaffold CI gap filed upstream: benchweave issue #596 (STE register).
+
+## 2026-11-07 — session history folded from todo
+
+- PR #10 merged 01:15Z (58766b8) under merge-when-green; issue #9
+  auto-closed. Lane fold on #589 (6687015879, STE); addendum 77 appended.
+- Driver fork dissolved by measurement (pyftdi talks, counters 00-08);
+  ring-purge defect isolated and filed SDK-side (6687332643), carried by d9
+  as PR-7; plugin drain loop reverted.
+- Trigger masks pinned (0x01000003/0x01000008); rate model rebuilt
+  (RATE_TABLE, rate_hz descriptor parameter, clock-bank select-and-prime);
+  Client Guide §6 ported — exit-prefill was full_load's missing write.
+- 0x61 two-registers fork resolved on paper, then proven on the bench.
+- PR-7 (SDK #239) validated pre-merge on hardware (first plugin read
+  through the transport, comment 6690919120); 239 merged; reply pacing
+  landed; two reads OK (session-2026-11-07-two-reads-ok.json).
+- Basic CI born (lint + tests, first run RED on the lint extra, green at
+  2f0a244); scaffold gap filed as benchweave #596.
+- Bench go executed (3 runs): reopen desyncs (ee0000 law), enable accepted
+  live (c1000a), first D0 edges in the ring; pre-fill holds. Addendum 79 +
+  plugin Part I updated; desync law banked to KNOWLEDGE.
+- Recorder --read-only mode (resync preamble); two addendum 79 corollaries;
+  adapter prime question answered (adapter.py:1011 — prime IS composed);
+  the real gap is armed device state.
