@@ -1,8 +1,9 @@
 # todo — active section (Phase 1 close-out + Phase 2 fold)
 
-- [x] Branch fix/c-tool-parity-fold committed (d9b4ea2); issue #9 + PR #10
-      open; suite 138/2 + check + check-ui + verify-ui green; merge awaits
-      review (self-merge denied by the harness — principal's word needed)
+- [x] PR #10 MERGED 2026-11-07 01:15Z (merge commit 58766b8) under the
+      principal's merge-when-green; fresh pre-merge rollup: 138/2 + check
+      exit 0; issue #9 auto-closed COMPLETED. Branch fix/c-tool-parity-fold
+      landed; local main synced.
 - [x] Lane fold posted to #589 (comment 6687015879, STE register): capture
       path, configuration, decoders rows + presets row closed at d9b4ea2
 - [x] Addendum 77 appended to the protocol record: seven measured deltas,
@@ -49,5 +50,11 @@
       (session-2026-11-07-two-reads-ok.json); read_counter's refusal is an
       honest counter gap after configure's 60 s budget miss (#589 row);
       read_samples awaits the engine enable
+- [x] Basic CI added (principal directive): .github/workflows/ci.yml, lint
+      (ruff, minimal E4/E7/E9/F set, docs/ excluded) + tests (pytest 3.13,
+      uv). Local: ruff clean, 138/2. First run RED (lint job spawned ruff
+      without the lint extra), fixed 2f0a244, run 42323637809 GREEN
+- [x] SDK-scaffold CI gap communicated: benchweave issue #596 (STE
+      register) — copier template should ship a lint+tests workflow
 - [ ] Phase 3: vectors rebuild from a clean capture (needs configure inside
       its budget + the engine enable go)

@@ -4,7 +4,7 @@ Source of truth for phase state. `todo.md` carries the active section's rows;
 completed rows move to `done.md`. Green = suite 138/2 + `benchweave-sdk check`
 exit 0 + `check-ui` exit 0 + `verify-ui` clean.
 
-## Phase 1 — C-tool parity fold ✅ (2026-11-06, green, uncommitted)
+## Phase 1 — C-tool parity fold ✅ (2026-11-06 green; merged to main 2026-11-07, 58766b8)
 
 Whole-body load at 460800, image-7 default recorded, timed flush
 (50/120/80 ms), no chip reset in flush (addendum 10), N=1 paced prime
@@ -15,7 +15,9 @@ surviving hypothesis. Evidence: `tools/session-2026-11-06-*.json`.
 
 - [x] Purge-before-parse, prime, timings, whole-body load
 - [x] UI preset/digest defect fixed (check-preset 4/4, check-ui green)
-- [x] Land on `main` via PR — #10 open, green, awaiting review
+- [x] Land on `main` via PR #10 — merged 2026-11-07 (58766b8) on the
+      principal's merge-when-green; CI added to main after the merge
+      (2f0a244 green: lint + tests)
 
 ## Phase 2 — Tracker fold: RedTeam + lane findings onto #589 ✅ (2026-11-07)
 

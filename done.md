@@ -47,3 +47,14 @@
 
 - [x] Reply pacing landed: two device reads (status, trigger_position)
       complete through the plugin against merged PR 239
+
+## 2026-11-07 — Phase 1 landed + CI birth
+
+- PR #10 merged (58766b8) under merge-when-green; issue #9 auto-closed.
+  Fresh pre-merge rollup: pytest 138/2, descriptor check exit 0.
+- Basic CI born on main: lint (ruff minimal set, docs/ excluded) + tests
+  (pytest, 3.13, uv). First run RED — lint job lacked the lint extra —
+  fixed in 2f0a244; run 42323637809 GREEN. Lint caught one real defect
+  (duplicate mid-file import block in test_protocol.py) plus an unused
+  import; suite stayed 138/2.
+- Scaffold CI gap filed upstream: benchweave issue #596 (STE register).
